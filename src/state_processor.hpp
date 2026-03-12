@@ -2,6 +2,7 @@
 
 #include "recorder.hpp"
 #include <cstdint>
+#include <string>
 
 class StateProcessor {
 public:

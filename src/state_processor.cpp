@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <sstream>
 #include <vector>
+#include <string>
 #include "esp_timer.h"
 
 static const char* TAG = "StateProcessor";
