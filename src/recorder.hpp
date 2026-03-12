@@ -14,6 +14,13 @@ public:
         uint8_t channels = 1;
     };
 
+    enum State {
+        WAITING_FOR_CREDS,
+        READY,
+        RECORDING,
+        SENDING
+    } state;
+
     static esp_err_t init(const Config& cfg);
     static void deinit();
 
