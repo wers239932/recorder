@@ -1,8 +1,10 @@
 #include "i2s_input.hpp"
 #include "board_pins.hpp"
-
-#include "driver/i2s_std.h"
 #include <cstdio>
+
+extern "C" {
+#include "driver/i2s_std.h"
+}
 
 static const char* TAG_I2S = "I2SInput";
 static i2s_chan_handle_t s_rx_handle = nullptr;

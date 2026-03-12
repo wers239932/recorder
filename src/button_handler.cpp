@@ -1,6 +1,9 @@
 #include "button_handler.hpp"
-#include "esp_timer.h"
 #include <algorithm>
+
+extern "C" {
+#include "esp_timer.h"
+}
 
 ButtonHandler::ButtonHandler(const Config& config) 
     : config_(config), state_(State::IDLE), press_start_time_(0), 

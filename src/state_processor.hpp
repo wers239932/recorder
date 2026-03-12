@@ -1,8 +1,8 @@
 #pragma once
 
-#include "recorder.hpp"
 #include <cstdint>
 #include <string>
+#include "recorder.hpp"
 
 class StateProcessor {
 public:

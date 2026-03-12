@@ -3,6 +3,10 @@
 #include <cstdarg>
 #include <algorithm>
 
+extern "C" {
+#include "driver/gpio.h"
+}
+
 // Реализация вложенного класса LGFX
 DisplayHandler::LGFX::LGFX() {
     { // Настройка SPI шины — КРИТИЧЕСКИ ВАЖНО: spi_mode = -1 для совместного использования!

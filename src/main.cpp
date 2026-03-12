@@ -2,9 +2,12 @@
 #include "display_handler.hpp"
 #include "recorder.hpp"
 #include "state_processor.hpp"
+#include <cstdio>
+
+extern "C" {
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <cstdio>
+}
 
 extern "C" void app_main(void) {
     printf("\n=== ESP32-C6 Recorder Boot ===\n");

@@ -3,9 +3,12 @@
 #include <functional>
 #include <string>
 #include <cstdint>
+
+extern "C" {
 #include "esp_err.h"
-#include "esp_event.h"  // КРИТИЧЕСКИ ВАЖНО: добавлен заголовок для esp_event_base_t
+#include "esp_event.h"
 #include "esp_wifi_types.h"
+}
 
 class WiFiManager {
 public:

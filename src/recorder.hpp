@@ -2,7 +2,10 @@
 
 #include <cstdint>
 #include <string>
+
+extern "C" {
 #include "esp_err.h"
+}
 
 class Recorder {
 public:

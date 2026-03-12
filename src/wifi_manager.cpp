@@ -1,10 +1,13 @@
 #include "wifi_manager.hpp"
+#include <cstring>
+#include <cstdio>
+
+extern "C" {
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "freertos/event_groups.h"
-#include <cstring>
-#include <cstdio>
+}
 
 static constexpr EventBits_t WIFI_CONNECTED_BIT = BIT0;
 static constexpr EventBits_t WIFI_FAIL_BIT = BIT1;

@@ -2,6 +2,11 @@
 
 #include <cstdint>
 #include <string>
+
+extern "C" {
+#include "driver/gpio.h"
+}
+
 #include <LovyanGFX.hpp>
 
 class DisplayHandler {

@@ -1,13 +1,20 @@
 #include "sd_storage.hpp"
 #include "board_pins.hpp"
+#include <cstdio>
+#include <cstring>
+#include <cerrno>
+#include <sys/stat.h>
+
+extern "C" {
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
+#include "driver/gpio.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
-#include <cstdio>
-#include <cstring>
-#include <sys/stat.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+}
 
 static const char* TAG = "SDStorage";
 static const char* kDefaultMount = "/sdcard";

@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstdint>
+
+extern "C" {
 #include "esp_err.h"
+}
 
 class I2SInput {
 public:
