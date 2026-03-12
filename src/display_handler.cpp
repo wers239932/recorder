@@ -5,19 +5,18 @@
 
 // Реализация вложенного класса LGFX
 DisplayHandler::LGFX::LGFX() {
-    { // Настройка SPI шины
+    { // Настройка SPI шины — КРИТИЧЕСКИ ВАЖНО: spi_mode = -1 для совместного использования!
         auto cfg = _bus_instance.config();
-        cfg.spi_host = SPI2_HOST;
-        cfg.spi_mode = 0;
+        cfg.spi_host = SPI2_HOST;      // Использовать уже инициализированную шину SPI2
+        cfg.spi_mode = -1;             // ✅ -1 = НЕ инициализировать шину повторно (требуется для совместного использования с SD)
         cfg.freq_write = 40000000;
         cfg.pin_sclk = 7;   // PIN_SCLK
         cfg.pin_mosi = 6;   // PIN_MOSI
-        cfg.pin_miso = -1;
+        cfg.pin_miso = 5;   // MISO для совместного использования с SD
         cfg.pin_dc = 15;    // PIN_DC
         _bus_instance.config(cfg);
         _panel_instance.setBus(&_bus_instance);
     }
-
     { // Настройка панели ST7789
         auto cfg = _panel_instance.config();
         cfg.pin_cs = 14;    // PIN_CS
@@ -36,10 +35,9 @@ DisplayHandler::LGFX::LGFX() {
         cfg.invert = true;
         cfg.rgb_order = false;
         cfg.dlen_16bit = false;
-        cfg.bus_shared = true;
+        // bus_shared для панели — в новых версиях может отсутствовать, поэтому не используем
         _panel_instance.config(cfg);
     }
-
     { // Настройка подсветки
         auto cfg = _light_instance.config();
         cfg.pin_bl = 22;    // PIN_BL
@@ -49,12 +47,11 @@ DisplayHandler::LGFX::LGFX() {
         _light_instance.config(cfg);
         _panel_instance.setLight(&_light_instance);
     }
-
     setPanel(&_panel_instance);
 }
 
-DisplayHandler::DisplayHandler(const Config& config) 
-    : config_(config) {}
+DisplayHandler::DisplayHandler(const Config& config)
+: config_(config) {}
 
 DisplayHandler::~DisplayHandler() {}
 
@@ -91,18 +88,15 @@ void DisplayHandler::draw_textf(int16_t x, int16_t y, uint8_t size, Color color,
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    
     draw_text(x, y, buffer, size, color);
 }
 
 void DisplayHandler::update_status_area(const std::string& line1, const std::string& line2, Color color) {
     fill_rect(0, 150, config_.width, 70, BLACK);
-    
     tft_.setTextSize(1);
     tft_.setTextColor(color);
     tft_.setCursor(10, 155);
     tft_.print(line1.c_str());
-    
     tft_.setCursor(10, 175);
     tft_.print(line2.c_str());
 }
