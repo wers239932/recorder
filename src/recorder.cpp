@@ -14,6 +14,8 @@
 
 static const char* TAG_REC = "Recorder";
 
+Recorder::State Recorder::state = Recorder::WAITING_FOR_CREDS;  // Initialize state
+
 static Recorder::Config s_cfg;
 static volatile bool s_recording = false;
 static FILE* s_file = nullptr;

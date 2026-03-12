@@ -19,4 +19,9 @@ public:
 
     // Simple test: create a file and write some bytes
     static esp_err_t self_test_create_file(const char* path = "/sdcard/test.txt");
+
+    // File operations
+    static esp_err_t read_file(const char* path, std::string& out_content);
+    static esp_err_t write_file(const char* path, const std::string& content);
+    static esp_err_t file_exists(const char* path);
 };

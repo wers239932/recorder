@@ -166,3 +166,63 @@ esp_err_t SDStorage::self_test_create_file(const char* path) {
         return ESP_FAIL;
     }
 }
+
+esp_err_t SDStorage::read_file(const char* path, std::string& out_content) {
+    if (!s_mounted) {
+        printf("%s: read_file FAILED: SD not mounted!\n", TAG);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    FILE* f = fopen(path, "r");
+    if (!f) {
+        printf("%s: read_file: file not found: %s\n", TAG, path);
+        return ESP_FAIL;
+    }
+
+    out_content.clear();
+    char buffer[256];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+        out_content.append(buffer, n);
+    }
+
+    fclose(f);
+    printf("%s: read_file SUCCESS: %s (%zu bytes)\n", TAG, path, out_content.size());
+    return ESP_OK;
+}
+
+esp_err_t SDStorage::write_file(const char* path, const std::string& content) {
+    if (!s_mounted) {
+        printf("%s: write_file FAILED: SD not mounted!\n", TAG);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    FILE* f = fopen(path, "w");
+    if (!f) {
+        printf("%s: write_file: fopen FAILED for %s (errno=%d: %s)\n", TAG, path, errno, strerror(errno));
+        return ESP_FAIL;
+    }
+
+    size_t n = fwrite(content.c_str(), 1, content.size(), f);
+    fclose(f);
+
+    if (n == content.size()) {
+        printf("%s: write_file SUCCESS: %s (%zu bytes)\n", TAG, path, n);
+        return ESP_OK;
+    } else {
+        printf("%s: write_file FAILED: wrote %zu/%zu bytes\n", TAG, n, content.size());
+        return ESP_FAIL;
+    }
+}
+
+esp_err_t SDStorage::file_exists(const char* path) {
+    if (!s_mounted) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    struct stat st;
+    if (stat(path, &st) == 0) {
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}

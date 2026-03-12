@@ -1,6 +1,7 @@
 #include "sd_storage.hpp"
 #include "display_handler.hpp"
 #include "recorder.hpp"
+#include "state_processor.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <cstdio>
@@ -63,8 +64,21 @@ extern "C" void app_main(void) {
     printf("\n=== SYSTEM READY ===\n");
     display.draw_text(10, 110, "READY", 2, DisplayHandler::WHITE);
 
-    // Основной цикл
+    // Инициализация обработчика состояния
+    printf("\n[5] Initializing state processor...\n");
+    StateProcessor::Config sp_cfg{};
+    sp_cfg.process_interval_ms = 100;  // Проверять состояние каждые 100ms
+    StateProcessor state_processor(sp_cfg);
+    printf("✅ State processor initialized\n");
+
+    // Основной цикл - проверяем состояние Recorder и обрабатываем его
+    printf("\n[6] Entering main loop...\n");
     while (true) {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        // Вызываем обработчик состояния
+        // Он проверит текущее состояние Recorder и вызовет соответствующий метод
+        state_processor.process();
+        
+        // Небольшая задержка для предотвращения перегрузки CPU
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }

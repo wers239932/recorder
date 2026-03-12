@@ -19,7 +19,9 @@ public:
         READY,
         RECORDING,
         SENDING
-    } state;
+    };
+
+    static State state;  // Current state of the recorder
 
     static esp_err_t init(const Config& cfg);
     static void deinit();
