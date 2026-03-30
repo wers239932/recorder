@@ -10,6 +10,7 @@ extern "C" {
 }
 
 extern "C" void app_main(void) {
+    sleep(5);
     printf("\n=== ESP32-C6 Recorder Boot ===\n");
 
     // ⚠️ КРИТИЧЕСКИ ВАЖНО: СНАЧАЛА SD, ПОТОМ ДИСПЛЕЙ!
