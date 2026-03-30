@@ -92,9 +92,15 @@ void StateProcessor::process() {
 
 void StateProcessor::process_waiting_for_creds() {
     // Handle waiting for credentials state
+
+    // Ensure SD card is mounted before accessing /sdcard
+    esp_err_t sd_err = SDStorage::init();
+    if (sd_err != ESP_OK) {
+        printf("%s: SD not ready (err=%d); will retry\n", TAG, (int)sd_err);
+        return;
+    }
     if (!g_creds_file_checked) {
-        g_creds_file_checked = true;
-        const char* creds_path = "/sdcard/.creds";
+        const char* creds_path = "/sdcard/creds";
         printf("%s: WAITING_FOR_CREDS - ensure %s exists and parse if present\n", TAG, creds_path);
 
         bool created = false;
@@ -103,15 +109,25 @@ void StateProcessor::process_waiting_for_creds() {
             std::string template_content =
                 "# WiFi credentials format: SSID:Password\n"
                 "# One network per line\n";
-            SDStorage::write_file(creds_path, template_content);
-            created = true;
+            esp_err_t werr = SDStorage::write_file(creds_path, template_content);
+            if (werr == ESP_OK) {
+                created = true;
+                g_creds_file_checked = true;
+            } else {
+                printf("%s: failed to create .creds (err=%d); will retry\n", TAG, (int)werr);
+                return;
+            }
         }
 
         g_wifi_networks.clear();
         if (!created) {
             std::string creds_content;
             esp_err_t err = SDStorage::read_file(creds_path, creds_content);
-            if (err == ESP_OK && !creds_content.empty()) {
+            if (err != ESP_OK) {
+                printf("%s: .creds read failed (err=%d); will retry\n", TAG, (int)err);
+                return;
+            }
+            if (!creds_content.empty()) {
                 std::istringstream stream(creds_content);
                 std::string line;
                 while (std::getline(stream, line)) {
@@ -135,8 +151,9 @@ void StateProcessor::process_waiting_for_creds() {
                 }
                 printf("%s: creds parsed: %zu network(s)\n", TAG, g_wifi_networks.size());
             } else {
-                printf("%s: .creds read failed or empty\n", TAG);
+                printf("%s: .creds empty\n", TAG);
             }
+            g_creds_file_checked = true;
         }
 
         if (g_wifi_manager && !g_wifi_networks.empty()) {

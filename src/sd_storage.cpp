@@ -89,7 +89,7 @@ esp_err_t SDStorage::init(const char* mount_point) {
     mount_config.format_if_mount_failed = false;
     mount_config.max_files = 4;
     mount_config.allocation_unit_size = 32 * 1024;
-    mount_config.disk_status_check_enable = true;
+    mount_config.disk_status_check_enable = false;
 
     sdmmc_card_t* card = nullptr;
     printf("%s: Mounting SD card at %s (freq=%d kHz)...\n", 
