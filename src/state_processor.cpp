@@ -2,6 +2,7 @@
 #include "sd_storage.hpp"
 #include "wifi_manager.hpp"
 #include "button_handler.hpp"
+#include "http_uploader.hpp"
 #include <cstdio>
 #include <sstream>
 #include <vector>
@@ -57,8 +58,13 @@ StateProcessor::StateProcessor(const Config& cfg)
                 }
             } else if (Recorder::state == Recorder::RECORDING) {
                 Recorder::stop();
-                Recorder::state = Recorder::READY;
-                printf("%s: Button SHORT_PRESS -> stop recording\n", TAG);
+                Recorder::state = Recorder::SENDING;
+                printf("%s: Button SHORT_PRESS -> stop recording, start upload\n", TAG);
+                esp_err_t up = HttpUploader::start_fixed_text_upload("http://192.168.0.5:8080/");
+                if (up != ESP_OK) {
+                    printf("%s: Upload task start failed (err=%d)\n", TAG, (int)up);
+                    Recorder::state = Recorder::READY;
+                }
             }
         });
         printf("%s: Button handler initialized\n", TAG);
