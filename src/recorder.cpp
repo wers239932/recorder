@@ -7,6 +7,10 @@
 #include <cstring>
 #include <sys/stat.h>
 #include <sys/unistd.h>
+#include <dirent.h>
+#include <strings.h>
+#include <ctype.h>
+#include <cstdlib>
 
 extern "C" {
 #include "freertos/FreeRTOS.h"
@@ -23,6 +27,30 @@ static Recorder::Config s_cfg;
 static volatile bool s_recording = false;
 static FILE* s_file = nullptr;
 static size_t s_data_bytes = 0;
+static TaskHandle_t s_rec_task = nullptr;
+
+static int get_next_wav_index() {
+    DIR* dir = opendir(s_cfg.dir.c_str());
+    if (!dir) return 1;
+    int maxn = 0;
+    struct dirent* ent;
+    while ((ent = readdir(dir)) != nullptr) {
+        const char* name = ent->d_name;
+        size_t len = strlen(name);
+        if (len > 4 && strcasecmp(name + len - 4, ".wav") == 0) {
+            bool digits_only = true;
+            for (size_t i = 0; i < len - 4; ++i) {
+                if (!isdigit((unsigned char)name[i])) { digits_only = false; break; }
+            }
+            if (digits_only) {
+                int n = atoi(name);
+                if (n > maxn) maxn = n;
+            }
+        }
+    }
+    closedir(dir);
+    return maxn + 1;
+}
 
 static void write_wav_header(FILE* f, uint32_t sample_rate, uint16_t bits, uint16_t channels, uint32_t data_bytes) {
     // Minimal WAV header (PCM)
@@ -81,19 +109,32 @@ esp_err_t Recorder::init(const Config& cfg) {
     auto err = I2SInput::init(icfg);
     if (err != ESP_OK) return err;
 
+    // Create recorder task if not running yet
+    if (s_rec_task == nullptr) {
+        BaseType_t ok = xTaskCreate(Recorder::task_run, "rec_task", 4096, nullptr, 5, &s_rec_task);
+        if (ok != pdPASS) {
+            printf("%s: xTaskCreate failed\n", TAG_REC);
+            return ESP_FAIL;
+        }
+    }
     return ESP_OK;
 }
 
 void Recorder::deinit() {
     I2SInput::deinit();
+    if (s_rec_task) {
+        vTaskDelete(s_rec_task);
+        s_rec_task = nullptr;
+    }
 }
 
 esp_err_t Recorder::start() {
     if (s_recording) return ESP_ERR_INVALID_STATE;
 
-    // Create filename with epoch seconds
+    // Create sequential filename: 1.wav, 2.wav, ... in target dir
     char filename[128];
-    snprintf(filename, sizeof(filename), "%s/%ld.wav", s_cfg.dir.c_str(), (long) (esp_timer_get_time()/1000000));
+    int idx = get_next_wav_index();
+    snprintf(filename, sizeof(filename), "%s/%d.wav", s_cfg.dir.c_str(), idx);
 
     s_file = fopen(filename, "wb+");
     if (!s_file) {

@@ -1,6 +1,7 @@
 #include "state_processor.hpp"
 #include "sd_storage.hpp"
 #include "wifi_manager.hpp"
+#include "button_handler.hpp"
 #include <cstdio>
 #include <sstream>
 #include <vector>
@@ -13,6 +14,7 @@ extern "C" {
 static const char* TAG = "StateProcessor";
 
 static WiFiManager* g_wifi_manager = nullptr;
+static ButtonHandler* g_button = nullptr;
 static bool g_creds_file_checked = false;
 static std::vector<std::pair<std::string, std::string>> g_wifi_networks;  // SSID, password pairs
 static size_t g_current_network_idx = 0;
@@ -30,6 +32,39 @@ StateProcessor::StateProcessor(const Config& cfg)
     } else {
         printf("%s: WARNING: WiFi manager init failed\n", TAG);
     }
+
+    // Initialize button handler
+    ButtonHandler::Config btn_cfg = ButtonHandler::default_config();
+    g_button = new ButtonHandler(btn_cfg);
+    if (g_button->init() == ESP_OK) {
+        g_button->register_callback([](ButtonHandler::EventType evt){
+            if (evt != ButtonHandler::EventType::SHORT_PRESS) return;
+            if (!g_wifi_manager) {
+                printf("%s: Button ignored: WiFi manager not ready\n", TAG);
+                return;
+            }
+            WiFiManager::Status st = g_wifi_manager->get_status();
+            if (!st.is_connected) {
+                printf("%s: Button ignored: waiting for WiFi connection\n", TAG);
+                return;
+            }
+            if (Recorder::state == Recorder::READY) {
+                if (Recorder::start() == ESP_OK) {
+                    Recorder::state = Recorder::RECORDING;
+                    printf("%s: Button SHORT_PRESS -> start recording\n", TAG);
+                } else {
+                    printf("%s: Button SHORT_PRESS -> start failed\n", TAG);
+                }
+            } else if (Recorder::state == Recorder::RECORDING) {
+                Recorder::stop();
+                Recorder::state = Recorder::READY;
+                printf("%s: Button SHORT_PRESS -> stop recording\n", TAG);
+            }
+        });
+        printf("%s: Button handler initialized\n", TAG);
+    } else {
+        printf("%s: WARNING: Button init failed\n", TAG);
+    }
 }
 
 StateProcessor::~StateProcessor() {
@@ -37,6 +72,10 @@ StateProcessor::~StateProcessor() {
         g_wifi_manager->stop();
         delete g_wifi_manager;
         g_wifi_manager = nullptr;
+    }
+    if (g_button) {
+        delete g_button;
+        g_button = nullptr;
     }
 }
 
@@ -54,6 +93,11 @@ bool StateProcessor::should_process() {
 }
 
 void StateProcessor::process() {
+    // Always tick button handler for debounce and event detection
+    if (g_button) {
+        g_button->tick();
+    }
+
     if (!should_process()) {
         return;
     }

@@ -53,7 +53,7 @@ extern "C" void app_main(void) {
     // Инициализация рекордера
     printf("\n[4] Initializing recorder...\n");
     Recorder::Config rec_cfg{};
-    rec_cfg.dir = "/sdcard/rec";
+    rec_cfg.dir = "/sdcard";
     rec_cfg.sample_rate = 16000;
     rec_cfg.bits_per_sample = 16;
     rec_cfg.channels = 1;
