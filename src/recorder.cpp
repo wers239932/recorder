@@ -28,6 +28,7 @@ static volatile bool s_recording = false;
 static FILE* s_file = nullptr;
 static size_t s_data_bytes = 0;
 static TaskHandle_t s_rec_task = nullptr;
+static volatile bool s_writer_busy = false;
 
 static int get_next_wav_index() {
     DIR* dir = opendir(s_cfg.dir.c_str());
@@ -155,12 +156,23 @@ esp_err_t Recorder::start() {
 void Recorder::stop() {
     if (!s_recording) return;
 
-    // finalize header
-    write_wav_header(s_file, s_cfg.sample_rate, s_cfg.bits_per_sample, s_cfg.channels, (uint32_t)s_data_bytes);
-    fclose(s_file);
-    s_file = nullptr;
+    // First stop recording to let the writer finish its current chunk
     s_recording = false;
-    printf("%s: stopped, bytes=%u\n", TAG_REC, (unsigned) s_data_bytes);
+    int waited_ms = 0;
+    while (s_writer_busy && waited_ms < 200) { // wait up to 200 ms
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+        waited_ms += 5;
+    }
+
+    if (s_file) {
+        // finalize header
+        fflush(s_file);
+        write_wav_header(s_file, s_cfg.sample_rate, s_cfg.bits_per_sample, s_cfg.channels, (uint32_t)s_data_bytes);
+        fclose(s_file);
+        s_file = nullptr;
+    }
+
+    printf("%s: stopped, bytes=%u (waited %d ms)\n", TAG_REC, (unsigned) s_data_bytes, waited_ms);
 }
 
 bool Recorder::is_recording() { return s_recording; }
@@ -173,15 +185,17 @@ void Recorder::task_run(void* arg) {
 
     while (true) {
         if (!s_recording) {
+            s_writer_busy = false;
             vTaskDelay(10/portTICK_PERIOD_MS);
             continue;
         }
         int n = I2SInput::read(i2s_buf, kChunk, 50);
         if (n < 0) {
+            s_writer_busy = false;
             vTaskDelay(5/portTICK_PERIOD_MS);
             continue;
         }
-        if (n == 0) continue;
+        if (n == 0) { s_writer_busy = false; continue; }
 
         // Convert from 32-bit right-justified (or left) to 16-bit PCM (take MSB 16 bits)
         size_t samples = n / kI2SFrameBytes;
@@ -191,10 +205,13 @@ void Recorder::task_run(void* arg) {
         }
 
         size_t bytes_to_write = samples * sizeof(int16_t);
-        size_t written = fwrite(pcm16, 1, bytes_to_write, s_file);
-        s_data_bytes += written;
-
-        // Optional: flush periodically to reduce data loss
-        if ((s_data_bytes & 0xFFFF) == 0) fflush(s_file);
+        s_writer_busy = true;
+        if (s_file) {
+            size_t written = fwrite(pcm16, 1, bytes_to_write, s_file);
+            s_data_bytes += written;
+            // Optional: flush periodically to reduce data loss
+            if ((s_data_bytes & 0xFFFF) == 0) fflush(s_file);
+        }
+        s_writer_busy = false;
     }
 }
