@@ -35,3 +35,5 @@ private:
     void process_ready();
     void process_recording();
     void process_sending();
+
+};
