@@ -94,77 +94,83 @@ void StateProcessor::process_waiting_for_creds() {
     // Handle waiting for credentials state
     if (!g_creds_file_checked) {
         g_creds_file_checked = true;
-        printf("%s: WAITING_FOR_CREDS - checking .creds file\n", TAG);
-        
         const char* creds_path = "/sdcard/.creds";
-        std::string creds_content;
-        
-        // Try to read existing .creds file
-        esp_err_t err = SDStorage::read_file(creds_path, creds_content);
-        
-        if (err == ESP_OK && !creds_content.empty()) {
-            // Parse credentials from file
-            printf("%s: .creds file found, parsing networks...\n", TAG);
-            std::istringstream stream(creds_content);
-            std::string line;
-            
-            while (std::getline(stream, line)) {
-                // Skip empty lines and comments
-                if (line.empty() || line[0] == '#') continue;
-                
-                // Format: SSID:Password
-                size_t colon_pos = line.find(':');
-                if (colon_pos != std::string::npos) {
-                    std::string ssid = line.substr(0, colon_pos);
-                    std::string password = line.substr(colon_pos + 1);
-                    g_wifi_networks.push_back({ssid, password});
-                    printf("%s: Added network: %s\n", TAG, ssid.c_str());
+        printf("%s: WAITING_FOR_CREDS - ensure %s exists and parse if present\n", TAG, creds_path);
+
+        bool created = false;
+        if (SDStorage::file_exists(creds_path) != ESP_OK) {
+            printf("%s: .creds file not found, creating template\n", TAG);
+            std::string template_content =
+                "# WiFi credentials format: SSID:Password\n"
+                "# One network per line\n";
+            SDStorage::write_file(creds_path, template_content);
+            created = true;
+        }
+
+        g_wifi_networks.clear();
+        if (!created) {
+            std::string creds_content;
+            esp_err_t err = SDStorage::read_file(creds_path, creds_content);
+            if (err == ESP_OK && !creds_content.empty()) {
+                std::istringstream stream(creds_content);
+                std::string line;
+                while (std::getline(stream, line)) {
+                    if (line.empty() || line[0] == '#') continue;
+                    while (!line.empty() && (line.back()=='\r' || line.back()=='\n' || line.back()==' ' || line.back()=='\t')) line.pop_back();
+                    size_t start = 0; while (start < line.size() && (line[start]==' ' || line[start]=='\t')) start++;
+                    std::string trimmed = line.substr(start);
+                    size_t colon_pos = trimmed.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string ssid = trimmed.substr(0, colon_pos);
+                        std::string password = trimmed.substr(colon_pos + 1);
+                        auto rtrim = [](std::string& s){ while (!s.empty() && (s.back()==' ' || s.back()=='\t')) s.pop_back(); };
+                        auto ltrim = [](std::string& s){ size_t i=0; while (i<s.size() && (s[i]==' '||s[i]=='\t')) i++; if (i) s.erase(0,i); };
+                        rtrim(ssid); ltrim(ssid);
+                        rtrim(password); ltrim(password);
+                        if (!ssid.empty()) {
+                            g_wifi_networks.push_back({ssid, password});
+                            printf("%s: parsed network: %s\n", TAG, ssid.c_str());
+                        }
+                    }
                 }
-            }
-            
-            if (!g_wifi_networks.empty()) {
-                printf("%s: Starting WiFi connection attempts (%zu networks)\n", TAG, g_wifi_networks.size());
-                g_current_network_idx = 0;
+                printf("%s: creds parsed: %zu network(s)\n", TAG, g_wifi_networks.size());
             } else {
-                printf("%s: .creds file is empty, starting AP mode\n", TAG);
-                if (g_wifi_manager) {
-                    g_wifi_manager->start_ap("SETUP_ME", "");
-                }
-            }
-        } else {
-            // File doesn't exist, create empty one and start AP mode
-            printf("%s: .creds file not found, creating empty file\n", TAG);
-            std::string empty_content = "# WiFi credentials format: SSID:Password\n";
-            SDStorage::write_file(creds_path, empty_content);
-            
-            printf("%s: Starting AP mode (SETUP_ME)\n", TAG);
-            if (g_wifi_manager) {
-                g_wifi_manager->start_ap("SETUP_ME", "");
+                printf("%s: .creds read failed or empty\n", TAG);
             }
         }
+
+        if (g_wifi_manager && !g_wifi_networks.empty()) {
+            printf("%s: Starting WiFi connection attempts (%zu network(s)). AP disabled.\n", TAG, g_wifi_networks.size());
+            g_current_network_idx = 0;
+            // fallthrough to connection attempt below
+        } else {
+            printf("%s: No WiFi networks to try; continuing without WiFi (no AP). Switching to READY.\n", TAG);
+            Recorder::state = Recorder::READY;
+            return;
+        }
     }
-    
-    // Try to connect to next network in the list
-    if (!g_wifi_networks.empty() && g_current_network_idx < g_wifi_networks.size()) {
+
+    // Try to connect to next network in the list (no AP mode)
+    if (!g_wifi_networks.empty() && g_current_network_idx < g_wifi_networks.size() && g_wifi_manager) {
         const auto& network = g_wifi_networks[g_current_network_idx];
         printf("%s: Attempting to connect to: %s\n", TAG, network.first.c_str());
-        
-        if (g_wifi_manager) {
-            esp_err_t err = g_wifi_manager->connect_sta(network.first, network.second);
-            if (err == ESP_OK) {
-                printf("%s: Connection attempt started for %s\n", TAG, network.first.c_str());
-            }
+        esp_err_t err = g_wifi_manager->connect_sta(network.first, network.second);
+        if (err == ESP_OK) {
+            printf("%s: Connection attempt started for %s\n", TAG, network.first.c_str());
+        } else {
+            printf("%s: Failed to start connection for %s (err=%d)\n", TAG, network.first.c_str(), err);
         }
-        
         g_current_network_idx++;
     }
-    
-    // Check if WiFi is connected
+
+    // Check if WiFi is connected; if not and all tried, continue without WiFi
     if (g_wifi_manager) {
         WiFiManager::Status status = g_wifi_manager->get_status();
         if (status.is_connected) {
-            printf("%s: ✅ WiFi connected! IP: %s\n", TAG, status.ip_address.c_str());
-            // Transition to READY state
+            printf("%s: \xE2\x9C\x85 WiFi connected! IP: %s\n", TAG, status.ip_address.c_str());
+            Recorder::state = Recorder::READY;
+        } else if (g_current_network_idx >= g_wifi_networks.size()) {
+            printf("%s: All networks attempted; continuing without WiFi. Switching to READY.\n", TAG);
             Recorder::state = Recorder::READY;
         }
     }
