@@ -66,14 +66,24 @@ esp_err_t HttpUploader::start_wav_upload(const char* url, const char* wav_path) 
     }
     return ESP_OK;
 }
-
 void HttpUploader::upload_task(void* arg) {
+    // === ВСЕ переменные объявляем ЗДЕСЬ, в начале ===
     int sock = -1;
     FILE* f = nullptr;
     int http_status = 0;
     bool success = false;
     char hdr_buf[384] = {0};
     char resp_buf[512] = {0};
+    int rcv = 0;                    // ← вынесено вверх
+    uint8_t* buf = nullptr;         // ← вынесено вверх
+    int sent = 0;                   // ← вынесено вверх
+    int hdr_len = 0;                // ← вынесено вверх
+    int gairet = 0;                 // ← вынесено вверх
+    struct addrinfo* res = nullptr; // ← вынесено вверх
+    struct addrinfo hints = {};     // ← вынесено вверх
+    uint16_t port = 80;             // ← вынесено вверх
+    std::string host, path;         // ← вынесено вверх (важно!)
+    struct stat st = {};            // ← вынесено вверх
     
     wifi_ap_record_t ap_info = {};
     wifi_mode_t mode = WIFI_MODE_NULL;
@@ -97,7 +107,6 @@ void HttpUploader::upload_task(void* arg) {
     set_phase(Phase::PREPARING);
 
     // File size
-    struct stat st = {};
     if (stat(s_wav_path.c_str(), &st) != 0) {
         ESP_LOGE(TAG_HTTP, "stat failed for %s (errno=%d)", s_wav_path.c_str(), errno);
         goto cleanup;
@@ -112,8 +121,8 @@ void HttpUploader::upload_task(void* arg) {
     }
 
     // URL parse
-    std::string host, path;
-    uint16_t port = 80;
+    port = 80;
+    host.clear(); path.clear();
     if (!parse_url(s_url, host, port, path)) {
         ESP_LOGE(TAG_HTTP, "URL parse failed: %s", s_url.c_str());
         goto cleanup;
@@ -122,15 +131,15 @@ void HttpUploader::upload_task(void* arg) {
     // Resolve and connect
     set_phase(Phase::CONNECTING);
 
-    struct addrinfo hints = {};
+    hints = {};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
     char portstr[8];
     snprintf(portstr, sizeof(portstr), "%u", (unsigned)port);
 
-    struct addrinfo* res = nullptr;
-    int gairet = getaddrinfo(host.c_str(), portstr, &hints, &res);
+    res = nullptr;
+    gairet = getaddrinfo(host.c_str(), portstr, &hints, &res);
     if (gairet != 0 || !res) {
         ESP_LOGE(TAG_HTTP, "getaddrinfo failed: %d", gairet);
         goto cleanup;
@@ -157,7 +166,7 @@ void HttpUploader::upload_task(void* arg) {
 
     // Headers
     set_phase(Phase::SENDING_HEADERS);
-    int hdr_len = snprintf(hdr_buf, sizeof(hdr_buf),
+    hdr_len = snprintf(hdr_buf, sizeof(hdr_buf),
         "POST %s HTTP/1.1\r\n"
         "Host: %s:%u\r\n"
         "Content-Type: audio/wav\r\n"
@@ -166,7 +175,7 @@ void HttpUploader::upload_task(void* arg) {
         "\r\n",
         path.c_str(), host.c_str(), (unsigned)port, (unsigned)s_status.total_bytes);
 
-    int sent = 0;
+    sent = 0;
     while (sent < hdr_len) {
         int n = send(sock, hdr_buf + sent, hdr_len - sent, 0);
         if (n <= 0) { s_status.last_errno = errno; goto cleanup; }
@@ -176,7 +185,7 @@ void HttpUploader::upload_task(void* arg) {
     // Body
     set_phase(Phase::SENDING_BODY);
     static const size_t CHUNK = 2048;
-    uint8_t* buf = (uint8_t*)malloc(CHUNK);
+    buf = (uint8_t*)malloc(CHUNK);
     if (!buf) goto cleanup;
 
     while (s_status.bytes_sent < s_status.total_bytes) {
@@ -198,10 +207,11 @@ void HttpUploader::upload_task(void* arg) {
         goto cleanup;
     }
     free(buf);
+    buf = nullptr; // на всякий случай
 
     // Response
     set_phase(Phase::WAITING_RESPONSE);
-    int rcv = recv(sock, resp_buf, sizeof(resp_buf) - 1, 0);
+    rcv = recv(sock, resp_buf, sizeof(resp_buf) - 1, 0);
     if (rcv > 0) {
         resp_buf[rcv] = '\0';
         if (sscanf(resp_buf, "HTTP/%*d.%*d %d", &http_status) == 1) {
@@ -211,6 +221,7 @@ void HttpUploader::upload_task(void* arg) {
     }
 
 cleanup:
+    if (buf) { free(buf); buf = nullptr; }
     if (f) { fclose(f); f = nullptr; }
     if (sock >= 0) { close(sock); sock = -1; }
 

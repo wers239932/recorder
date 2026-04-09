@@ -68,7 +68,7 @@ StateProcessor::StateProcessor(const Config& cfg)
                     Recorder::state = Recorder::READY;
                     return;
                 }
-                esp_err_t up = HttpUploader::start_wav_upload("http://192.168.0.5:8080/", wav_path.c_str());
+                esp_err_t up = HttpUploader::start_wav_upload("http://192.168.31.68:8080/", wav_path.c_str());
                 if (up != ESP_OK) {
                     printf("%s: Upload task start failed (err=%d)\n", TAG, (int)up);
                     Recorder::state = Recorder::READY;
