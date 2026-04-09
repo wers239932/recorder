@@ -12,7 +12,7 @@ public:
     struct Config {
         std::string mount_point = "/sdcard";
         std::string dir = "/sdcard";
-        uint32_t sample_rate = 16000;
+        uint32_t sample_rate = 32000;
         uint16_t bits_per_sample = 16;
         uint8_t channels = 1;
     };

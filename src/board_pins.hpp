@@ -22,5 +22,5 @@
 #endif
 
 #ifndef PIN_I2S_DIN
-#define PIN_I2S_DIN    9   // Data In пин
+#define PIN_I2S_DIN    2   // Data In пин
 #endif

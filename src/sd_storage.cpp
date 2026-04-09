@@ -99,20 +99,11 @@ esp_err_t SDStorage::init(const char* mount_point) {
                                   &host, &slot_config, &mount_config, &card);
     
     if (err != ESP_OK) {
-        printf("%s: ❌ MOUNT FAILED: %s\n", TAG, esp_err_to_name(err));
-        printf("%s: Pins: MOSI=%d MISO=%d SCLK=%d SD_CS=%d LCD_CS=%d\n", 
-               TAG, PIN_LCD_MOSI, PIN_SD_MISO, PIN_LCD_SCLK, PIN_SD_CS, PIN_LCD_CS);
-        printf("%s: Common causes:\n", TAG);
-        printf("  - SD card not inserted or damaged\n");
-        printf("  - Display initialized BEFORE SD (must be SD first!)\n");
-        printf("  - Wrong CS pin definition (must be plain number 10, not GPIO_NUM_10)\n");
-        printf("  - Shared SPI bus conflict (both devices must keep CS HIGH when idle)\n");
         return err;
     }
 
     s_mounted = true;
     s_card = card;
-    printf("%s: ✅ MOUNT SUCCESS at %s\n", TAG, mount_point ? mount_point : kDefaultMount);
     sdmmc_card_print_info(stdout, card);
 
     // Создать директорию для записей
