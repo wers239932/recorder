@@ -30,13 +30,13 @@ extern "C" void app_main(void) {
     printf("LCD\n");
     DisplayHandler::Config disp_cfg{};
     disp_cfg.width = 172;
-    disp_cfg.height = 320;
+    disp_cfg.height = 344;
     disp_cfg.rotation = 0;
     disp_cfg.brightness = 50;
     DisplayHandler display(disp_cfg);
     display.init();
     display.clear(DisplayHandler::BLACK);
-    display.draw_text(10, 10, "SD Card OK", 2, DisplayHandler::GREEN);
+    display.draw_text(35, 20, "SD Card OK", 2, DisplayHandler::GREEN);
 
     // Тест записи
     // trimmed

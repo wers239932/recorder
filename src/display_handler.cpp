@@ -27,9 +27,9 @@ DisplayHandler::LGFX::LGFX() {
         cfg.pin_rst = 21;   // PIN_RST
         cfg.pin_busy = -1;
         cfg.memory_width = 172;
-        cfg.memory_height = 320;
-        cfg.panel_width = 172;
-        cfg.panel_height = 320;
+        cfg.memory_height = 344;
+        cfg.panel_width = 200;
+        cfg.panel_height = 344;
         cfg.offset_x = 0;
         cfg.offset_y = 0;
         cfg.offset_rotation = 0;
@@ -80,7 +80,7 @@ void DisplayHandler::draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, Color
 }
 
 void DisplayHandler::draw_text(int16_t x, int16_t y, const std::string& text, uint8_t size, Color color) {
-    tft_.setCursor(x, y);
+    tft_.setCursor(32 + x, y);
     tft_.setTextSize(size);
     tft_.setTextColor(color);
     tft_.print(text.c_str());
@@ -99,9 +99,9 @@ void DisplayHandler::update_status_area(const std::string& line1, const std::str
     fill_rect(0, 150, config_.width, 70, BLACK);
     tft_.setTextSize(1);
     tft_.setTextColor(color);
-    tft_.setCursor(10, 155);
+    tft_.setCursor(42, 155);
     tft_.print(line1.c_str());
-    tft_.setCursor(10, 175);
+    tft_.setCursor(42, 175);
     tft_.print(line2.c_str());
 }
 
