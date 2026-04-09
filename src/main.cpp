@@ -69,10 +69,13 @@ extern "C" void app_main(void) {
 
     // Инициализация обработчика состояния
     // trimmed
-    StateProcessor::Config sp_cfg{};
+        StateProcessor::Config sp_cfg{}
+    ;
     sp_cfg.process_interval_ms = 100;  // Проверять состояние каждые 100ms
     StateProcessor state_processor(sp_cfg);
+    state_processor.set_display(&display);
     // trimmed
+
 
     // Основной цикл - проверяем состояние Recorder и обрабатываем его
     // trimmed

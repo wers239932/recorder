@@ -3,6 +3,7 @@
 #include "wifi_manager.hpp"
 #include "button_handler.hpp"
 #include "http_uploader.hpp"
+#include "display_handler.hpp"
 #include <cstdio>
 #include <sstream>
 #include <vector>
@@ -23,7 +24,8 @@ static size_t g_current_network_idx = 0;
 StateProcessor::StateProcessor(const Config& cfg)
     : config_(cfg), 
       last_state_(Recorder::WAITING_FOR_CREDS),
-      last_process_time_ms_(0) {
+      last_process_time_ms_(0),
+      display_(nullptr) {
     printf("%s: initialized with interval %lu ms\n", TAG, config_.process_interval_ms);
     
     // Initialize WiFi manager
@@ -60,7 +62,13 @@ StateProcessor::StateProcessor(const Config& cfg)
                 Recorder::stop();
                 Recorder::state = Recorder::SENDING;
                 printf("%s: Button SHORT_PRESS -> stop recording, start upload\n", TAG);
-                esp_err_t up = HttpUploader::start_fixed_text_upload("http://192.168.0.5:8080/");
+                std::string wav_path;
+                if (!Recorder::get_last_wav_path(wav_path)) {
+                    printf("%s: No completed WAV to upload\n", TAG);
+                    Recorder::state = Recorder::READY;
+                    return;
+                }
+                esp_err_t up = HttpUploader::start_wav_upload("http://192.168.0.5:8080/", wav_path.c_str());
                 if (up != ESP_OK) {
                     printf("%s: Upload task start failed (err=%d)\n", TAG, (int)up);
                     Recorder::state = Recorder::READY;
@@ -142,6 +150,7 @@ void StateProcessor::process() {
 
 void StateProcessor::process_waiting_for_creds() {
     // Handle waiting for credentials state
+    if (display_) display_->update_status_area("STATE: WAITING CREDS", "put /sdcard/creds", DisplayHandler::GRAY);
 
     // Ensure SD card is mounted before accessing /sdcard
     esp_err_t sd_err = SDStorage::init();
@@ -245,22 +254,54 @@ void StateProcessor::process_waiting_for_creds() {
 
 void StateProcessor::process_ready() {
     // Handle ready state
-    // e.g., check for start recording signal from button handler
     printf("%s: processing READY state\n", TAG);
+    if (display_) {
+        display_->update_status_area("STATE: READY", "", DisplayHandler::WHITE);
+    }
 }
 
 void StateProcessor::process_recording() {
     // Handle recording state
-    // e.g., monitor recording progress, check for stop signal
     if (Recorder::is_recording()) {
         printf("%s: processing RECORDING state - recording in progress\n", TAG);
+        if (display_) display_->update_status_area("STATE: RECORDING", "press to stop", DisplayHandler::GREEN);
     } else {
         printf("%s: processing RECORDING state - recording stopped unexpectedly\n", TAG);
+        if (display_) display_->update_status_area("STATE: RECORDING", "stopped", DisplayHandler::YELLOW);
     }
 }
 
 void StateProcessor::process_sending() {
-    // Handle sending state
-    // e.g., monitor upload progress, handle completion
-    printf("%s: processing SENDING state\n", TAG);
+    auto st = HttpUploader::get_status();
+    const char* phase_str = "";
+    switch (st.phase) {
+        case HttpUploader::Phase::IDLE: phase_str = "IDLE"; break;
+        case HttpUploader::Phase::PREPARING: phase_str = "PREPARING"; break;
+        case HttpUploader::Phase::CONNECTING: phase_str = "CONNECTING"; break;
+        case HttpUploader::Phase::SENDING_HEADERS: phase_str = "HEADERS"; break;
+        case HttpUploader::Phase::SENDING_BODY: phase_str = "BODY"; break;
+        case HttpUploader::Phase::WAITING_RESPONSE: phase_str = "WAITING"; break;
+        case HttpUploader::Phase::SUCCESS: phase_str = "SUCCESS"; break;
+        case HttpUploader::Phase::FAILED: phase_str = "FAILED"; break;
+    }
+    unsigned pct = (st.total_bytes > 0) ? (unsigned)((st.bytes_sent * 100) / st.total_bytes) : 0;
+    printf("%s: SENDING phase=%s http=%d %u/%u (%u%%) errno=%d\n", TAG, phase_str, st.http_code,
+           (unsigned)st.bytes_sent, (unsigned)st.total_bytes, pct, st.last_errno);
+
+    if (display_) {
+        char line1[64];
+        char line2[64];
+        snprintf(line1, sizeof(line1), "STATE: SENDING (%s)", phase_str);
+        if (st.total_bytes > 0)
+            snprintf(line2, sizeof(line2), "%u%% %u/%u", pct, (unsigned)st.bytes_sent, (unsigned)st.total_bytes);
+        else
+            snprintf(line2, sizeof(line2), "...");
+        auto color = (st.phase == HttpUploader::Phase::FAILED) ? DisplayHandler::RED :
+                     (st.phase == HttpUploader::Phase::SUCCESS) ? DisplayHandler::GREEN : DisplayHandler::YELLOW;
+        display_->update_status_area(line1, line2, color);
+    }
+}
+
+void StateProcessor::set_display(DisplayHandler* display) {
+    display_ = display;
 }

@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include <cstdlib>
+#include <string>
 
 extern "C" {
 #include "freertos/FreeRTOS.h"
@@ -29,6 +30,8 @@ static FILE* s_file = nullptr;
 static size_t s_data_bytes = 0;
 static TaskHandle_t s_rec_task = nullptr;
 static volatile bool s_writer_busy = false;
+static std::string s_current_path;
+static std::string s_last_completed_path;
 
 static int get_next_wav_index() {
     DIR* dir = opendir(s_cfg.dir.c_str());
@@ -140,6 +143,7 @@ esp_err_t Recorder::start() {
     if (!s_file) {
         return ESP_FAIL;
     }
+    s_current_path = filename;
 
     // Reserve space for header
     uint8_t zero_hdr[44] = {0};
@@ -167,12 +171,20 @@ void Recorder::stop() {
         write_wav_header(s_file, s_cfg.sample_rate, s_cfg.bits_per_sample, s_cfg.channels, (uint32_t)s_data_bytes);
         fclose(s_file);
         s_file = nullptr;
+        s_last_completed_path = s_current_path;
+        s_current_path.clear();
     }
 
     // trimmed
 }
 
 bool Recorder::is_recording() { return s_recording; }
+
+bool Recorder::get_last_wav_path(std::string& out_path) {
+    if (s_last_completed_path.empty()) return false;
+    out_path = s_last_completed_path;
+    return true;
+}
 
 void Recorder::task_run(void* arg) {
     constexpr size_t kI2SFrameBytes = 4; // 32-bit slot for mono

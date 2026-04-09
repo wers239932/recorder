@@ -36,6 +36,9 @@ public:
     // Returns true if recording
     static bool is_recording();
 
+    // Return absolute path to the last completed WAV file. Returns true on success.
+    static bool get_last_wav_path(std::string& out_path);
+
     // Task function that pulls from I2S and writes to SD (call from a task)
     static void task_run(void* arg);
 };
