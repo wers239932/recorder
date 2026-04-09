@@ -32,7 +32,7 @@ esp_err_t I2SInput::init(const Config& cfg) {
 
     // Slot config
     std_cfg.slot_cfg = (i2s_std_slot_config_t){};
-    std_cfg.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_32BIT;
+    std_cfg.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_24BIT;
     std_cfg.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_32BIT; // many I2S mics need 32-bit slots; we'll pack to 16 later
     std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO;
     std_cfg.slot_cfg.slot_mask = (i2s_std_slot_mask_t)(I2S_STD_SLOT_LEFT | I2S_STD_SLOT_RIGHT);
