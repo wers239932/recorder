@@ -19,7 +19,7 @@ extern "C" {
 #include "esp_heap_caps.h"
 }
 
-static const char* TAG_REC = "Recorder";
+static const char* TAG_REC = "R";
 
 Recorder::State Recorder::state = Recorder::WAITING_FOR_CREDS;  // Initialize state
 
@@ -114,7 +114,6 @@ esp_err_t Recorder::init(const Config& cfg) {
     if (s_rec_task == nullptr) {
         BaseType_t ok = xTaskCreate(Recorder::task_run, "rec_task", 4096, nullptr, 5, &s_rec_task);
         if (ok != pdPASS) {
-            printf("%s: xTaskCreate failed\n", TAG_REC);
             return ESP_FAIL;
         }
     }
@@ -139,7 +138,6 @@ esp_err_t Recorder::start() {
 
     s_file = fopen(filename, "wb+");
     if (!s_file) {
-        printf("%s: fopen failed for %s\n", TAG_REC, filename);
         return ESP_FAIL;
     }
 
@@ -149,7 +147,6 @@ esp_err_t Recorder::start() {
     s_data_bytes = 0;
     s_recording = true;
 
-    printf("%s: recording to %s\n", TAG_REC, filename);
     return ESP_OK;
 }
 
@@ -172,7 +169,7 @@ void Recorder::stop() {
         s_file = nullptr;
     }
 
-    printf("%s: stopped, bytes=%u (waited %d ms)\n", TAG_REC, (unsigned) s_data_bytes, waited_ms);
+    // trimmed
 }
 
 bool Recorder::is_recording() { return s_recording; }
