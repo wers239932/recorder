@@ -187,7 +187,7 @@ bool Recorder::get_last_wav_path(std::string& out_path) {
 }
 
 void Recorder::task_run(void* arg) {
-    constexpr size_t kI2SFrameBytes = 4; // 32-bit slot for mono
+    constexpr size_t kI2SFrameBytes = 8; // 2x32-bit (L+R) per frame
     constexpr size_t kChunk = 1024;      // bytes to read per call from I2S
     uint8_t* i2s_buf = (uint8_t*) heap_caps_malloc(kChunk, MALLOC_CAP_8BIT);
     int16_t pcm16[512]; // 1024 bytes
@@ -206,11 +206,11 @@ void Recorder::task_run(void* arg) {
         }
         if (n == 0) { s_writer_busy = false; continue; }
 
-        // Convert from 32-bit right-justified (or left) to 16-bit PCM (take MSB 16 bits)
+        // Convert interleaved 2x32-bit (L,R) to mono 16-bit PCM: take one channel's MSB 16 bits
         size_t samples = n / kI2SFrameBytes;
         for (size_t i = 0; i < samples; ++i) {
-            int32_t s32 = ((int32_t*)i2s_buf)[i];
-            pcm16[i] = (int16_t)(s32 >> 16); // keep MSB
+            int32_t s32 = ((int32_t*)i2s_buf)[2 * i]; // take left channel
+            pcm16[i] = (int16_t)(s32 >> 8);  // 24->16 bit downshift (INMP441 outputs 24-bit in 32-bit slot)
         }
 
         size_t bytes_to_write = samples * sizeof(int16_t);
