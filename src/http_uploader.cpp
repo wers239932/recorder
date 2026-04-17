@@ -148,7 +148,6 @@ void HttpUploader::upload_task(void* arg) {
     sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (sock < 0) {
         ESP_LOGE(TAG_HTTP, "socket() failed");
-        freeaddrinfo(res);
         goto cleanup;
     }
 
@@ -159,10 +158,10 @@ void HttpUploader::upload_task(void* arg) {
     if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
         s_status.last_errno = errno;
         ESP_LOGE(TAG_HTTP, "connect failed (errno=%d)", errno);
-        freeaddrinfo(res);
         goto cleanup;
     }
     freeaddrinfo(res);
+    res = nullptr;
 
     // Headers
     set_phase(Phase::SENDING_HEADERS);
@@ -196,14 +195,13 @@ void HttpUploader::upload_task(void* arg) {
         size_t off = 0;
         while (off < rd) {
             int n = send(sock, (const char*)buf + off, rd - off, 0);
-            if (n <= 0) { s_status.last_errno = errno; free(buf); goto cleanup; }
+            if (n <= 0) { s_status.last_errno = errno; goto cleanup; }
             off += (size_t)n;
             s_status.bytes_sent += (size_t)n;
         }
     }
     if (s_status.bytes_sent != s_status.total_bytes) {
         ESP_LOGE(TAG_HTTP, "short send: %u/%u", (unsigned)s_status.bytes_sent, (unsigned)s_status.total_bytes);
-        free(buf);
         goto cleanup;
     }
     free(buf);
@@ -221,6 +219,7 @@ void HttpUploader::upload_task(void* arg) {
     }
 
 cleanup:
+    if (res) { freeaddrinfo(res); res = nullptr; }
     if (buf) { free(buf); buf = nullptr; }
     if (f) { fclose(f); f = nullptr; }
     if (sock >= 0) { close(sock); sock = -1; }

@@ -15,12 +15,24 @@
 #define PIN_SD_MOSI    6   // MOSI может быть общим
 #define PIN_SD_MISO    5   // !!! ИСПРАВЛЕНО: Было 2, надо 5 [citation:8]
 
-#define PIN_I2S_BCLK   1   // BCLK пин
+// === I2S microphone (INMP441) ===
+// INMP441 - это стандартный I2S-микрофон, а не PDM.
+// Ему нужны три линии:
+//   BCLK/SCK -> PIN_I2S_BCLK
+//   WS/LRCLK -> PIN_I2S_WS
+//   SD       -> PIN_I2S_DIN
+//
+// Важно: GPIO2 уже задействован под LCD и не подходит для DIN микрофона.
+// Если вы используете другие физические выводы, переопределите эти макросы
+// перед подключением board_pins.hpp.
+#ifndef PIN_I2S_BCLK
+#define PIN_I2S_BCLK   1
+#endif
 
 #ifndef PIN_I2S_WS
-#define PIN_I2S_WS     3   // Word Select пин
+#define PIN_I2S_WS     3
 #endif
 
 #ifndef PIN_I2S_DIN
-#define PIN_I2S_DIN    2   // Data In пин
+#define PIN_I2S_DIN    2
 #endif

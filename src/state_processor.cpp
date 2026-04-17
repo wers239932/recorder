@@ -15,6 +15,8 @@ extern "C" {
 
 static const char* TAG = "StateProcessor";
 
+static const char* serverAddr = "http://192.168.1.12:8080/";
+
 static WiFiManager* g_wifi_manager = nullptr;
 static ButtonHandler* g_button = nullptr;
 static bool g_creds_file_checked = false;
@@ -68,7 +70,7 @@ StateProcessor::StateProcessor(const Config& cfg)
                     Recorder::state = Recorder::READY;
                     return;
                 }
-                esp_err_t up = HttpUploader::start_wav_upload("http://192.168.31.68:8080/", wav_path.c_str());
+                esp_err_t up = HttpUploader::start_wav_upload(serverAddr, wav_path.c_str());
                 if (up != ESP_OK) {
                     printf("%s: Upload task start failed (err=%d)\n", TAG, (int)up);
                     Recorder::state = Recorder::READY;

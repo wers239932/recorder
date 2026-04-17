@@ -4,6 +4,7 @@
 #include "board_pins.hpp"
 
 #include <cstdio>
+#include <cerrno>
 #include <cstring>
 #include <sys/stat.h>
 #include <sys/unistd.h>
@@ -11,7 +12,6 @@
 #include <strings.h>
 #include <ctype.h>
 #include <cstdlib>
-#include <string>
 
 extern "C" {
 #include "freertos/FreeRTOS.h"
@@ -20,7 +20,7 @@ extern "C" {
 #include "esp_heap_caps.h"
 }
 
-static const char* TAG_REC = "R";
+static const char* TAG_REC = "Recorder";
 
 Recorder::State Recorder::state = Recorder::WAITING_FOR_CREDS;  // Initialize state
 
@@ -32,6 +32,9 @@ static TaskHandle_t s_rec_task = nullptr;
 static volatile bool s_writer_busy = false;
 static std::string s_current_path;
 static std::string s_last_completed_path;
+static constexpr bool kMicIsLeftChannel = true;
+static constexpr size_t kRawSampleBytes = I2SInput::kRawSampleBytes;
+static constexpr size_t kReadChunkBytes = 4096;
 
 static int get_next_wav_index() {
     DIR* dir = opendir(s_cfg.dir.c_str());
@@ -108,10 +111,18 @@ esp_err_t Recorder::init(const Config& cfg) {
     icfg.pin_bclk = PIN_I2S_BCLK;
     icfg.pin_ws = PIN_I2S_WS;
     icfg.pin_din = PIN_I2S_DIN;
-    icfg.sample_rate = cfg.sample_rate;
+    icfg.sample_rate = (cfg.i2s_sample_rate != 0) ? cfg.i2s_sample_rate : cfg.sample_rate;
     icfg.bits_per_sample = cfg.bits_per_sample;
+    icfg.mic_is_left = kMicIsLeftChannel;
     auto err = I2SInput::init(icfg);
     if (err != ESP_OK) return err;
+
+    printf("%s: wav_rate=%lu i2s_rate=%lu channels=%u bits=%u\n",
+           TAG_REC,
+           (unsigned long)cfg.sample_rate,
+           (unsigned long)icfg.sample_rate,
+           (unsigned)cfg.channels,
+           (unsigned)cfg.bits_per_sample);
 
     // Create recorder task if not running yet
     if (s_rec_task == nullptr) {
@@ -187,42 +198,82 @@ bool Recorder::get_last_wav_path(std::string& out_path) {
 }
 
 void Recorder::task_run(void* arg) {
-    constexpr size_t kI2SFrameBytes = 8; // 2x32-bit (L+R) per frame from I2S
-    constexpr size_t kChunk = 8192;      // larger buffer for stable recording
-    uint8_t* i2s_buf = (uint8_t*) heap_caps_malloc(kChunk, MALLOC_CAP_8BIT);
-    int16_t pcm16[kChunk / kI2SFrameBytes]; // convert to mono 16-bit samples
+    uint8_t* i2s_buf = static_cast<uint8_t*>(heap_caps_malloc(kReadChunkBytes, MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
+    int16_t pcm16[kReadChunkBytes / kRawSampleBytes];
+    uint32_t debug_counter = 0;
+    int64_t started_us = 0;
+    size_t samples_captured = 0;
+
+    if (!i2s_buf) {
+        printf("%s: failed to allocate I2S DMA buffer\n", TAG_REC);
+        vTaskDelete(nullptr);
+        return;
+    }
 
     while (true) {
         if (!s_recording) {
             s_writer_busy = false;
+            started_us = 0;
+            samples_captured = 0;
             vTaskDelay(10/portTICK_PERIOD_MS);
             continue;
         }
-        int n = I2SInput::read(i2s_buf, kChunk, 50);
+        if (started_us == 0) {
+            started_us = esp_timer_get_time();
+        }
+
+        int n = I2SInput::read(i2s_buf, kReadChunkBytes, 50);
         if (n < 0) {
             s_writer_busy = false;
             vTaskDelay(5/portTICK_PERIOD_MS);
             continue;
         }
-        if (n == 0) { s_writer_busy = false; continue; }
-
-        // Convert interleaved 2x32-bit (L,R) to mono 16-bit PCM: take left channel
-        // INMP441: 24-bit data left-aligned in 32-bit slot (bits 31..8 = data, 7..0 = 0)
-        // To get 16-bit: shift right by 8, then cast to int16_t (takes upper 16 bits of 24-bit data)
-        size_t samples = n / kI2SFrameBytes;
-        for (size_t i = 0; i < samples; ++i) {
-            int32_t s32 = ((int32_t*)i2s_buf)[2 * i]; // left channel only (INMP441 L/R tied to GND)
-            pcm16[i] = (int16_t)(s32 >> 8); // shift by 8 to get correct 16-bit range
+        if (n == 0) {
+            s_writer_busy = false;
+            continue;
         }
+        if ((n % kRawSampleBytes) != 0) {
+            n -= (n % kRawSampleBytes);
+        }
+        if (n == 0) {
+            s_writer_busy = false;
+            continue;
+        }
+
+        // I2S runs in mono on the selected slot, so each 32-bit word is one microphone sample.
+        size_t samples = n / kRawSampleBytes;
+        const int32_t* words = reinterpret_cast<const int32_t*>(i2s_buf);
+        int16_t peak = 0;
+        for (size_t i = 0; i < samples; ++i) {
+            const int16_t pcm = I2SInput::raw_to_pcm16(words[i]);
+            pcm16[i] = pcm;
+            const int16_t abs_pcm = pcm < 0 ? static_cast<int16_t>(-pcm) : pcm;
+            if (abs_pcm > peak) peak = abs_pcm;
+        }
+        samples_captured += samples;
 
         size_t bytes_to_write = samples * sizeof(int16_t);
         s_writer_busy = true;
         if (s_file) {
             size_t written = fwrite(pcm16, 1, bytes_to_write, s_file);
             s_data_bytes += written;
-            // Optional: flush periodically to reduce data loss
-            if ((s_data_bytes & 0xFFFF) == 0) fflush(s_file);
+            if (written != bytes_to_write) {
+                printf("%s: short write: want=%u wrote=%u errno=%d\n",
+                       TAG_REC, (unsigned)bytes_to_write, (unsigned)written, errno);
+            }
         }
         s_writer_busy = false;
+
+        if ((++debug_counter % 32U) == 0U) {
+            const int64_t elapsed_us = esp_timer_get_time() - started_us;
+            const unsigned measured_rate = (elapsed_us > 0)
+                ? (unsigned)((samples_captured * 1000000ULL) / (uint64_t)elapsed_us)
+                : 0U;
+            printf("%s: read=%d bytes samples=%u peak=%d first=%d rate=%uHz target=%luHz\n",
+                   TAG_REC, n, (unsigned)samples, peak, pcm16[0], measured_rate,
+                   (unsigned long)((s_cfg.i2s_sample_rate != 0) ? s_cfg.i2s_sample_rate : s_cfg.sample_rate));
+        }
+
+        if ((s_data_bytes & 0xFFFF) == 0) fflush(s_file);
     }
 }
