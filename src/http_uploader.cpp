@@ -130,16 +130,17 @@ static bool upload_once(const std::string& url,
     }
     freeaddrinfo(res);
     res = nullptr;
-
     set_phase(HttpUploader::Phase::SENDING_HEADERS);
     auth_header = bearer_token.empty()
         ? std::string()
         : std::string("Authorization: Bearer ") + bearer_token + "\r\n";
     hdr_len = std::snprintf(nullptr, 0,
+
         "POST %s HTTP/1.1\r\n"
         "Host: %s:%u\r\n"
         "Content-Type: audio/wav\r\n"
         "Content-Length: %u\r\n"
+
         "%s"
         "Connection: close\r\n"
         "\r\n",
@@ -160,6 +161,7 @@ static bool upload_once(const std::string& url,
         "Connection: close\r\n"
         "\r\n",
         path.c_str(), host.c_str(), static_cast<unsigned>(port), static_cast<unsigned>(s_status.total_bytes), auth_header.c_str());
+
 
     sent = 0;
     while (sent < hdr_len) {

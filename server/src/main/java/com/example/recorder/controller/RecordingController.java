@@ -6,6 +6,7 @@ import com.example.recorder.dto.RecordingsListResponse;
 import com.example.recorder.dto.UploadRecordingRequest;
 import com.example.recorder.service.recording.RecordingService;
 import com.example.recorder.service.summary.SummaryService;
+import com.example.recorder.util.TempMultipartFile;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,7 +58,7 @@ public class RecordingController {
     private final SummaryService summaryService;
     
     /**
-     * Загрузка WAV-файла с ESP32-C6 устройства.
+     * Загрузка WAV-файла с ESP32-C6 устройства (multipart/form-data).
      * Автоматически запускает суммаризацию (если включено в конфигурации).
      */
     @PostMapping(value = "/recordings/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -116,6 +117,93 @@ public class RecordingController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (Exception e) {
             log.error("Upload failed", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Upload failed", e);
+        }
+    }
+    
+    /**
+     * Загрузка WAV-файла с ESP32-C6 устройства (raw body с токеном авторизации).
+     * Принимает аудио как raw body с Content-Type: audio/wav.
+     * Токен авторизации передаётся в заголовке X-Device-Token.
+     * Автоматически запускает суммаризацию (если включено в конфигурации).
+     */
+    @PostMapping(value = "/recordings/upload-raw", 
+                 consumes = MediaType.valueOf("audio/wav"),
+                 produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ApiResponse<RecordingResponse>> uploadRecordingRaw(
+            @RequestBody byte[] audioData,
+            @RequestHeader(value = "X-Device-Token", required = false) String deviceToken,
+            @RequestHeader(value = "X-Device-Info", required = false, defaultValue = "ESP32-C6-Recorder") 
+            String deviceInfo,
+            @RequestHeader(value = "X-Forwarded-For", required = false) String xForwardedFor,
+            @RequestHeader(value = "X-Real-IP", required = false) String xRealIp) {
+        
+        String clientIp = getClientIp(xForwardedFor, xRealIp);
+        
+        // Валидация токена авторизации
+        if (deviceToken == null || deviceToken.isBlank()) {
+            log.warn("Missing device token from IP: {}", clientIp);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Device token is required");
+        }
+        
+        // Здесь можно добавить проверку токена против базы разрешённых устройств
+        // Например: deviceAuthService.validateToken(deviceToken);
+        log.info("Device token received: {} (validation skipped in demo mode)", 
+                 deviceToken.substring(0, Math.min(8, deviceToken.length())) + "...");
+        
+        if (audioData == null || audioData.length == 0) {
+            throw new IllegalArgumentException("Audio data is empty");
+        }
+        
+        // Создаём временный MultipartFile из raw данных
+        TempMultipartFile tempFile = new TempMultipartFile(audioData, "recording.wav", "audio/wav");
+        
+        UploadRecordingRequest request = UploadRecordingRequest.builder()
+            .deviceInfo(deviceInfo)
+            .deviceIp(clientIp)
+            .filename("recording.wav")
+            .fileSize((long) audioData.length)
+            .contentType("audio/wav")
+            .build();
+        
+        try {
+            RecordingResponse response = recordingService.uploadRecording(tempFile, request, clientIp);
+            
+            log.info("Recording uploaded (raw): id={}, size={}", response.getId(), response.getFileSize());
+            
+            // Добавляем информацию о суммаризации в ответ
+            String summaryStatus = recordingService.getSummarizationStatus(response.getId());
+            Map<String, String> summarizationInfo = new HashMap<>();
+            summarizationInfo.put("status", summaryStatus);
+            summarizationInfo.put("autoSummarize", "true");
+            
+            // Создаём расширенный ответ с информацией о суммаризации
+            RecordingResponse responseWithSummary = RecordingResponse.builder()
+                .id(response.getId())
+                .filename(response.getFilename())
+                .originalFilename(response.getOriginalFilename())
+                .fileSize(response.getFileSize())
+                .contentType(response.getContentType())
+                .deviceInfo(response.getDeviceInfo())
+                .deviceIp(response.getDeviceIp())
+                .status(response.getStatus())
+                .createdAt(response.getCreatedAt())
+                .downloadUrl(response.getDownloadUrl())
+                .build();
+            
+            return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success(
+                    "Recording uploaded successfully. Summarization started.", 
+                    responseWithSummary,
+                    summarizationInfo
+                ));
+                
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad request: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Raw upload failed", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Upload failed", e);
         }
     }

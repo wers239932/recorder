@@ -16,8 +16,10 @@ extern "C" {
 
 static const char* TAG = "StateProcessor";
 
+
 static const char* kDefaultUploadUrl = "http://192.168.1.12:8080/api/v1/data/upload";
 static constexpr uint32_t kRemotePollIntervalMs = 1000;
+
 
 static WiFiManager* g_wifi_manager = nullptr;
 static AuthManager* g_auth_manager = nullptr;
