@@ -41,7 +41,7 @@ public class SummaryClientImpl implements SummaryClient {
         MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
         bodyBuilder.part("recording_id", recordingId);
         bodyBuilder.part("audio_file", new FileSystemResource(audioFile))
-            .header("Content-Type", MediaType.parseMediaType("audio/wav"));
+            .header("Content-Type", "audio/wav");
         
         if (language != null && !language.isBlank()) {
             bodyBuilder.part("language", language);

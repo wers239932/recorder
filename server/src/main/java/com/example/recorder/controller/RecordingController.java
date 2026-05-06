@@ -128,7 +128,7 @@ public class RecordingController {
      * Автоматически запускает суммаризацию (если включено в конфигурации).
      */
     @PostMapping(value = "/recordings/upload-raw", 
-                 consumes = MediaType.valueOf("audio/wav"),
+                 consumes = "audio/wav",
                  produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ApiResponse<RecordingResponse>> uploadRecordingRaw(
             @RequestBody byte[] audioData,

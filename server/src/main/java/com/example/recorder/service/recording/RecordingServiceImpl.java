@@ -138,7 +138,7 @@ public class RecordingServiceImpl implements RecordingService {
             Files.deleteIfExists(filePath);
             log.info("Deleted file: {}", filePath);
         } catch (IOException e) {
-            log.warn("Failed to delete file {}: {}", filePath, e.getMessage());
+            log.warn("Failed to delete file: {}", e.getMessage());
         }
         
         // Удаление сущности (суммаризация удалится каскадом)

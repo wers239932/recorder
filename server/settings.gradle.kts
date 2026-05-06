@@ -1,1 +1,1 @@
-rootProject.name = 'recorder-server'
+rootProject.name = "recorder-server"
