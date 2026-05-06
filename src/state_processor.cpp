@@ -15,7 +15,7 @@ extern "C" {
 
 static const char* TAG = "StateProcessor";
 
-static const char* serverAddr = "http://192.168.1.12:8080/";
+static const char* serverAddr = "http://192.168.1.12:8080/api/v1/recordings/upload-raw";
 
 static WiFiManager* g_wifi_manager = nullptr;
 static ButtonHandler* g_button = nullptr;

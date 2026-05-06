@@ -165,14 +165,20 @@ void HttpUploader::upload_task(void* arg) {
 
     // Headers
     set_phase(Phase::SENDING_HEADERS);
+    
+    // Токен авторизации устройства (захардкожен для примера)
+    const char* DEVICE_TOKEN = "esp32-c6-device-token-12345";
+    
     hdr_len = snprintf(hdr_buf, sizeof(hdr_buf),
         "POST %s HTTP/1.1\r\n"
         "Host: %s:%u\r\n"
         "Content-Type: audio/wav\r\n"
         "Content-Length: %u\r\n"
+        "X-Device-Token: %s\r\n"
+        "X-Device-Info: ESP32-C6-Recorder\r\n"
         "Connection: close\r\n"
         "\r\n",
-        path.c_str(), host.c_str(), (unsigned)port, (unsigned)s_status.total_bytes);
+        path.c_str(), host.c_str(), (unsigned)port, (unsigned)s_status.total_bytes, DEVICE_TOKEN);
 
     sent = 0;
     while (sent < hdr_len) {

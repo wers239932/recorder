@@ -1,5 +1,49 @@
-.pio
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/ipch
+```
+# Compiled and build artifacts
+*.class
+*.o
+*.obj
+*.out
+
+# Dependencies
+target/
+.m2/
+.gradle/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Editors
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Python specific (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+.Python
+venv/
+.venv/
+pip-log.txt
+pip-selfcheck.json
+
+# Java specific
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Build system
+build/
+dist/
+```
