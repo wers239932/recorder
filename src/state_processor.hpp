@@ -29,6 +29,8 @@ private:
     Recorder::State last_state_;
     uint32_t last_process_time_ms_;
     DisplayHandler* display_;
+    uint32_t last_remote_poll_time_ms_;
+    uint32_t last_remote_command_sequence_;
 
     // Helper to get current time in milliseconds
     uint32_t get_time_ms();

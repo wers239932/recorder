@@ -31,6 +31,7 @@ public:
     // Start background upload of a WAV file to the given URL (e.g. "http://192.168.0.5:8080/upload")
     // The task runs in background and updates internal Status; query with get_status().
     static esp_err_t start_wav_upload(const char* url, const char* wav_path);
+    static void set_auth_manager(class AuthManager* auth_manager);
 
     // Get current status snapshot
     static Status get_status();
