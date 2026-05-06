@@ -4,6 +4,7 @@
 #include "recorder.hpp"
 #include "state_processor.hpp"
 #include <cstdio>
+#include <unistd.h>
 
 extern "C" {
 #include "freertos/FreeRTOS.h"
@@ -47,20 +48,14 @@ extern "C" void app_main(void) {
     sleep(5);
     printf("Boot\n");
 
-    // ⚠️ КРИТИЧЕСКИ ВАЖНО: СНАЧАЛА SD, ПОТОМ ДИСПЛЕЙ!
-    // Если дисплей инициализируется первым — он захватит шину SPI2 и SD не сможет работать
+    // Сначала пробуем SD, затем продолжаем запуск даже при деградации.
     printf("SD\n");
     esp_err_t err = SDStorage::init();
-    if (err != ESP_OK) {
+    const bool sd_ready = (err == ESP_OK);
+    if (!sd_ready) {
         printf("SD fail: %s\n", esp_err_to_name(err));
-        // Остановка — без SD карты запись невозможна
-        while (true) {
-            printf("SD?\n");
-            vTaskDelay(2000 / portTICK_PERIOD_MS);
-        }
     }
 
-    // Теперь можно инициализировать дисплей
     printf("LCD\n");
     DisplayHandler::Config disp_cfg{};
     disp_cfg.width = 172;
@@ -70,20 +65,25 @@ extern "C" void app_main(void) {
     DisplayHandler display(disp_cfg);
     display.init();
     display.clear(DisplayHandler::BLACK);
-    display.draw_text(35, 20, "SD Card OK", 2, DisplayHandler::GREEN);
-
-    // Тест записи
-    // trimmed
-    err = SDStorage::self_test_create_file("/sdcard/test.txt");
-    if (err == ESP_OK) {
-        display.draw_text(10, 50, "SD Test: PASS", 1, DisplayHandler::GREEN);
-        printf("SD test OK\n");
+    if (sd_ready) {
+        display.draw_text(35, 20, "SD Card OK", 2, DisplayHandler::GREEN);
     } else {
-        display.draw_text(10, 50, "SD Test: FAIL", 1, DisplayHandler::RED);
-        printf("SD test FAIL\n");
+        display.draw_text(10, 20, "SD Card FAIL", 2, DisplayHandler::RED);
     }
 
-    // Инициализация рекордера
+    if (sd_ready) {
+        err = SDStorage::self_test_create_file("/sdcard/test.txt");
+        if (err == ESP_OK) {
+            display.draw_text(10, 50, "SD Test: PASS", 1, DisplayHandler::GREEN);
+            printf("SD test OK\n");
+        } else {
+            display.draw_text(10, 50, "SD Test: FAIL", 1, DisplayHandler::RED);
+            printf("SD test FAIL\n");
+        }
+    } else {
+        display.draw_text(10, 50, "SD Test: SKIP", 1, DisplayHandler::YELLOW);
+    }
+
     printf("REC\n");
     Recorder::Config rec_cfg{};
     rec_cfg.dir = "/sdcard";
@@ -91,38 +91,31 @@ extern "C" void app_main(void) {
     rec_cfg.i2s_sample_rate = rec_cfg.sample_rate;
     rec_cfg.bits_per_sample = 16;
     rec_cfg.channels = 1;
-    err = Recorder::init(rec_cfg);
-    if (err != ESP_OK) {
-        printf("REC init fail: %s\n", esp_err_to_name(err));
-        display.draw_text(10, 80, "Recorder: FAIL", 1, DisplayHandler::YELLOW);
-    } else {
-        display.draw_text(10, 80, "Recorder: OK", 1, DisplayHandler::GREEN);
-        if (kRunMicSelfTestOnBoot) {
-            run_mic_self_test();
+    if (sd_ready) {
+        err = Recorder::init(rec_cfg);
+        if (err != ESP_OK) {
+            printf("REC init fail: %s\n", esp_err_to_name(err));
+            display.draw_text(10, 80, "Recorder: FAIL", 1, DisplayHandler::YELLOW);
+        } else {
+            display.draw_text(10, 80, "Recorder: OK", 1, DisplayHandler::GREEN);
+            if (kRunMicSelfTestOnBoot) {
+                run_mic_self_test();
+            }
         }
+    } else {
+        display.draw_text(10, 80, "Recorder: WAIT SD", 1, DisplayHandler::YELLOW);
     }
 
     printf("READY\n");
     display.draw_text(10, 110, "READY", 2, DisplayHandler::WHITE);
 
-    // Инициализация обработчика состояния
-    // trimmed
-        StateProcessor::Config sp_cfg{}
-    ;
-    sp_cfg.process_interval_ms = 100;  // Проверять состояние каждые 100ms
+    StateProcessor::Config sp_cfg{};
+    sp_cfg.process_interval_ms = 100;
     StateProcessor state_processor(sp_cfg);
     state_processor.set_display(&display);
-    // trimmed
 
-
-    // Основной цикл - проверяем состояние Recorder и обрабатываем его
-    // trimmed
     while (true) {
-        // Вызываем обработчик состояния
-        // Он проверит текущее состояние Recorder и вызовет соответствующий метод
         state_processor.process();
-        
-        // Небольшая задержка для предотвращения перегрузки CPU
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }

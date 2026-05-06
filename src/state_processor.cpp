@@ -1,5 +1,6 @@
 #include "state_processor.hpp"
 #include "sd_storage.hpp"
+#include "auth/auth_manager.h"
 #include "wifi_manager.hpp"
 #include "button_handler.hpp"
 #include "http_uploader.hpp"
@@ -15,19 +16,81 @@ extern "C" {
 
 static const char* TAG = "StateProcessor";
 
-static const char* serverAddr = "http://192.168.1.12:8080/";
+static const char* kDefaultUploadUrl = "http://192.168.1.12:8080/api/v1/data/upload";
+static constexpr uint32_t kRemotePollIntervalMs = 1000;
 
 static WiFiManager* g_wifi_manager = nullptr;
+static AuthManager* g_auth_manager = nullptr;
 static ButtonHandler* g_button = nullptr;
 static bool g_creds_file_checked = false;
+static bool g_auth_file_checked = false;
 static std::vector<std::pair<std::string, std::string>> g_wifi_networks;  // SSID, password pairs
 static size_t g_current_network_idx = 0;
+
+namespace {
+bool wifi_connected() {
+    if (!g_wifi_manager) {
+        return false;
+    }
+    return g_wifi_manager->get_status().is_connected;
+}
+
+bool start_recording_from_source(const char* source) {
+    if (Recorder::state != Recorder::READY) {
+        return false;
+    }
+    if (Recorder::start() != ESP_OK) {
+        printf("%s: %s -> start failed\n", TAG, source);
+        return false;
+    }
+    Recorder::state = Recorder::RECORDING;
+    printf("%s: %s -> start recording\n", TAG, source);
+    return true;
+}
+
+bool stop_recording_and_upload_from_source(const char* source) {
+    if (Recorder::state != Recorder::RECORDING) {
+        return false;
+    }
+
+    Recorder::stop();
+    Recorder::state = Recorder::SENDING;
+    printf("%s: %s -> stop recording, prepare upload\n", TAG, source);
+
+    std::string wav_path;
+    if (!Recorder::get_last_wav_path(wav_path)) {
+        printf("%s: %s -> no completed WAV to upload\n", TAG, source);
+        Recorder::state = Recorder::READY;
+        return false;
+    }
+
+    if (!wifi_connected()) {
+        printf("%s: %s -> WiFi unavailable, WAV kept on SD\n", TAG, source);
+        Recorder::state = Recorder::READY;
+        return true;
+    }
+
+    const std::string upload_url =
+        (g_auth_manager && !g_auth_manager->getUploadUrl().empty())
+            ? g_auth_manager->getUploadUrl()
+            : std::string(kDefaultUploadUrl);
+    const esp_err_t up = HttpUploader::start_wav_upload(upload_url.c_str(), wav_path.c_str());
+    if (up != ESP_OK) {
+        printf("%s: %s -> upload task start failed (err=%d)\n", TAG, source, static_cast<int>(up));
+        Recorder::state = Recorder::READY;
+        return false;
+    }
+    return true;
+}
+}  // namespace
 
 StateProcessor::StateProcessor(const Config& cfg)
     : config_(cfg), 
       last_state_(Recorder::WAITING_FOR_CREDS),
       last_process_time_ms_(0),
-      display_(nullptr) {
+      display_(nullptr),
+      last_remote_poll_time_ms_(0),
+      last_remote_command_sequence_(0) {
     printf("%s: initialized with interval %lu ms\n", TAG, config_.process_interval_ms);
     
     // Initialize WiFi manager
@@ -37,6 +100,8 @@ StateProcessor::StateProcessor(const Config& cfg)
     } else {
         printf("%s: WARNING: WiFi manager init failed\n", TAG);
     }
+    g_auth_manager = new AuthManager();
+    HttpUploader::set_auth_manager(g_auth_manager);
 
     // Initialize button handler
     ButtonHandler::Config btn_cfg = ButtonHandler::default_config();
@@ -44,37 +109,10 @@ StateProcessor::StateProcessor(const Config& cfg)
     if (g_button->init() == ESP_OK) {
         g_button->register_callback([](ButtonHandler::EventType evt){
             if (evt != ButtonHandler::EventType::SHORT_PRESS) return;
-            if (!g_wifi_manager) {
-                printf("%s: Button ignored: WiFi manager not ready\n", TAG);
-                return;
-            }
-            WiFiManager::Status st = g_wifi_manager->get_status();
-            if (!st.is_connected) {
-                printf("%s: Button ignored: waiting for WiFi connection\n", TAG);
-                return;
-            }
             if (Recorder::state == Recorder::READY) {
-                if (Recorder::start() == ESP_OK) {
-                    Recorder::state = Recorder::RECORDING;
-                    printf("%s: Button SHORT_PRESS -> start recording\n", TAG);
-                } else {
-                    printf("%s: Button SHORT_PRESS -> start failed\n", TAG);
-                }
+                start_recording_from_source("Button SHORT_PRESS");
             } else if (Recorder::state == Recorder::RECORDING) {
-                Recorder::stop();
-                Recorder::state = Recorder::SENDING;
-                printf("%s: Button SHORT_PRESS -> stop recording, start upload\n", TAG);
-                std::string wav_path;
-                if (!Recorder::get_last_wav_path(wav_path)) {
-                    printf("%s: No completed WAV to upload\n", TAG);
-                    Recorder::state = Recorder::READY;
-                    return;
-                }
-                esp_err_t up = HttpUploader::start_wav_upload(serverAddr, wav_path.c_str());
-                if (up != ESP_OK) {
-                    printf("%s: Upload task start failed (err=%d)\n", TAG, (int)up);
-                    Recorder::state = Recorder::READY;
-                }
+                stop_recording_and_upload_from_source("Button SHORT_PRESS");
             }
         });
         printf("%s: Button handler initialized\n", TAG);
@@ -92,6 +130,11 @@ StateProcessor::~StateProcessor() {
     if (g_button) {
         delete g_button;
         g_button = nullptr;
+    }
+    HttpUploader::set_auth_manager(nullptr);
+    if (g_auth_manager) {
+        delete g_auth_manager;
+        g_auth_manager = nullptr;
     }
 }
 
@@ -169,7 +212,8 @@ void StateProcessor::process_waiting_for_creds() {
             printf("%s: .creds file not found, creating template\n", TAG);
             std::string template_content =
                 "# WiFi credentials format: SSID:Password\n"
-                "# One network per line\n";
+                "# One network per line\n"
+                "TestWiFi:TestPassword\n";
             esp_err_t werr = SDStorage::write_file(creds_path, template_content);
             if (werr == ESP_OK) {
                 created = true;
@@ -228,6 +272,16 @@ void StateProcessor::process_waiting_for_creds() {
         }
     }
 
+    if (!g_auth_file_checked && g_auth_manager) {
+        const bool auth_ok = g_auth_manager->begin("/sdcard/auth.txt");
+        if (!auth_ok) {
+            printf("%s: auth config missing or invalid; template created or retry scheduled\n", TAG);
+        } else {
+            printf("%s: auth config loaded\n", TAG);
+        }
+        g_auth_file_checked = auth_ok;
+    }
+
     // Try to connect to next network in the list (no AP mode)
     if (!g_wifi_networks.empty() && g_current_network_idx < g_wifi_networks.size() && g_wifi_manager) {
         const auto& network = g_wifi_networks[g_current_network_idx];
@@ -246,6 +300,11 @@ void StateProcessor::process_waiting_for_creds() {
         WiFiManager::Status status = g_wifi_manager->get_status();
         if (status.is_connected) {
             printf("%s: \xE2\x9C\x85 WiFi connected! IP: %s\n", TAG, status.ip_address.c_str());
+            if (g_auth_manager && g_auth_manager->hasConfig()) {
+                if (!g_auth_manager->refreshToken()) {
+                    printf("%s: auth server unavailable, continuing in offline mode\n", TAG);
+                }
+            }
             Recorder::state = Recorder::READY;
         } else if (g_current_network_idx >= g_wifi_networks.size()) {
             printf("%s: All networks attempted; continuing without WiFi. Switching to READY.\n", TAG);
@@ -255,21 +314,62 @@ void StateProcessor::process_waiting_for_creds() {
 }
 
 void StateProcessor::process_ready() {
-    // Handle ready state
-    printf("%s: processing READY state\n", TAG);
     if (display_) {
         display_->update_status_area("STATE: READY", "", DisplayHandler::WHITE);
+    }
+
+    if (!g_auth_manager || !g_auth_manager->hasConfig() || !wifi_connected()) {
+        return;
+    }
+
+    const uint32_t now = get_time_ms();
+    if (now - last_remote_poll_time_ms_ < kRemotePollIntervalMs) {
+        return;
+    }
+    last_remote_poll_time_ms_ = now;
+
+    AuthManager::RemoteCommand command;
+    if (!g_auth_manager->fetchRemoteCommand(command) || !command.valid) {
+        return;
+    }
+    if (command.sequence <= last_remote_command_sequence_) {
+        return;
+    }
+
+    last_remote_command_sequence_ = command.sequence;
+    if (command.should_record) {
+        start_recording_from_source("Remote command");
     }
 }
 
 void StateProcessor::process_recording() {
-    // Handle recording state
     if (Recorder::is_recording()) {
-        printf("%s: processing RECORDING state - recording in progress\n", TAG);
         if (display_) display_->update_status_area("STATE: RECORDING", "press to stop", DisplayHandler::GREEN);
     } else {
-        printf("%s: processing RECORDING state - recording stopped unexpectedly\n", TAG);
         if (display_) display_->update_status_area("STATE: RECORDING", "stopped", DisplayHandler::YELLOW);
+    }
+
+    if (!Recorder::is_recording() || !g_auth_manager || !g_auth_manager->hasConfig() || !wifi_connected()) {
+        return;
+    }
+
+    const uint32_t now = get_time_ms();
+    if (now - last_remote_poll_time_ms_ < kRemotePollIntervalMs) {
+        return;
+    }
+    last_remote_poll_time_ms_ = now;
+
+    AuthManager::RemoteCommand command;
+    if (!g_auth_manager->fetchRemoteCommand(command) || !command.valid) {
+        return;
+    }
+    if (command.sequence <= last_remote_command_sequence_) {
+        return;
+    }
+
+    last_remote_command_sequence_ = command.sequence;
+    if (!command.should_record) {
+        stop_recording_and_upload_from_source("Remote command");
     }
 }
 
