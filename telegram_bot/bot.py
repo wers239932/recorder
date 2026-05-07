@@ -36,7 +36,7 @@ SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8080")
 API_BASE = f"{SERVER_URL}/api/v1"
 
 # Состояния для ConversationHandler
-LOGIN, REGISTER, REGISTER_PASSWORD, RENAME = range(4)
+LOGIN, LOGIN_PASSWORD, REGISTER, REGISTER_PASSWORD, RENAME = range(5)
 
 # Хранилище авторизованных пользователей
 authorized_users: Dict[int, str] = {}
@@ -275,7 +275,7 @@ class TelegramBot:
             f"✅ Введите пароль для пользователя '{username}':"
         )
 
-        return LOGIN
+        return LOGIN_PASSWORD
 
     async def process_login_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Обработка пароля при входе"""
@@ -737,10 +737,8 @@ def main() -> None:
     login_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("login", bot.login_command)],
         states={
-            LOGIN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_login_username),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_login_password),
-            ],
+            LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_login_username)],
+            LOGIN_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_login_password)],
         },
         fallbacks=[CommandHandler("cancel", bot.cancel_conversation)],
         per_message=False,
