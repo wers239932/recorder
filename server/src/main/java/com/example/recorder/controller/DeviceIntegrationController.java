@@ -26,7 +26,7 @@ public class DeviceIntegrationController {
 
     private final DeviceAuthService deviceAuthService;
 
-    @PostMapping("/auth/login")
+    @PostMapping("/device/auth/login")
     public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody LoginRequest request) {
         DeviceAuthService.AuthenticationResult auth =
             deviceAuthService.authenticate(request.login(), request.passwordHash());
