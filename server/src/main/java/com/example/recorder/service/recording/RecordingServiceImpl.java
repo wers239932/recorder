@@ -35,18 +35,18 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class RecordingServiceImpl implements RecordingService {
-    
+
     private final RecordingRepository recordingRepository;
     private final SummaryRepository summaryRepository;
     private final SummaryService summaryService;
     private final SummaryClientProperties summaryProperties;
-    
+
     @Value("${recorder.storage.path:./recordings}")
     private String storagePath;
-    
+
     @Value("${recorder.storage.max-file-size:104857600}")
     private long maxFileSize;
-    
+
     @PostConstruct
     public void init() {
         try {
@@ -59,7 +59,7 @@ public class RecordingServiceImpl implements RecordingService {
             throw new RuntimeException("Failed to initialize storage directory", e);
         }
     }
-    
+
     /**
      * Uploads a new audio recording.
      *
@@ -77,7 +77,7 @@ public class RecordingServiceImpl implements RecordingService {
             String clientIp) throws IOException {
 
         log.info("Uploading recording: filename={}, size={}",
-            request.getFilename(), file.getSize());
+                request.getFilename(), file.getSize());
 
         // Валидация
         validateFile(file);
@@ -94,15 +94,15 @@ public class RecordingServiceImpl implements RecordingService {
 
         // Создание сущности записи
         RecordingEntity recording = RecordingEntity.builder()
-            .id(uniqueId)
-            .filename(filename)
-            .originalFilename(request.getFilename())
-            .fileSize(file.getSize())
-            .contentType(file.getContentType() != null ? file.getContentType() : "audio/wav")
-            .deviceInfo(request.getDeviceInfo())
-            .deviceIp(clientIp)
-            .status(RecordingEntity.RecordingStatus.UPLOADED)
-            .build();
+                .id(uniqueId)
+                .filename(filename)
+                .originalFilename(request.getFilename())
+                .fileSize(file.getSize())
+                .contentType(file.getContentType() != null ? file.getContentType() : "audio/wav")
+                .deviceInfo(request.getDeviceInfo())
+                .deviceIp(clientIp)
+                .status(RecordingEntity.RecordingStatus.UPLOADED)
+                .build();
         recordingRepository.save(recording);
 
         log.info("Recording uploaded successfully: id={}, path={}", recording.getId(), filename);
@@ -119,14 +119,14 @@ public class RecordingServiceImpl implements RecordingService {
     @Transactional(readOnly = true)
     public Optional<RecordingResponse> getRecordingById(String id) {
         return recordingRepository.findById(id)
-            .map(entity -> RecordingResponse.fromEntity(entity, ""));
+                .map(entity -> RecordingResponse.fromEntity(entity, ""));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<RecordingResponse> getAllRecordings(Pageable pageable) {
         return recordingRepository.findLatest(pageable)
-            .map(entity -> RecordingResponse.fromEntity(entity, ""));
+                .map(entity -> RecordingResponse.fromEntity(entity, ""));
     }
 
     @Override
@@ -161,7 +161,7 @@ public class RecordingServiceImpl implements RecordingService {
     @Transactional(readOnly = true)
     public Optional<Path> getRecordingFilePath(String id) {
         return recordingRepository.findById(id)
-            .map(recording -> Paths.get(storagePath, recording.getFilename()));
+                .map(recording -> Paths.get(storagePath, recording.getFilename()));
     }
 
     @Override
@@ -174,8 +174,8 @@ public class RecordingServiceImpl implements RecordingService {
     public long[] getStorageStats() {
         long count = recordingRepository.count();
         long totalSize = recordingRepository.findAll().stream()
-            .mapToLong(RecordingEntity::getFileSize)
-            .sum();
+                .mapToLong(RecordingEntity::getFileSize)
+                .sum();
         return new long[]{count, totalSize};
     }
 
@@ -190,7 +190,7 @@ public class RecordingServiceImpl implements RecordingService {
         log.info("Starting summarization for recording: {}", recordingId);
 
         RecordingEntity recording = recordingRepository.findById(recordingId)
-            .orElseThrow(() -> new IllegalArgumentException("Recording not found: " + recordingId));
+                .orElseThrow(() -> new IllegalArgumentException("Recording not found: " + recordingId));
 
         if (summaryRepository.existsByRecordingId(recordingId)) {
             log.warn("Summarization already exists for recording: {}", recordingId);
@@ -198,11 +198,11 @@ public class RecordingServiceImpl implements RecordingService {
         }
 
         SummaryEntity summary = SummaryEntity.builder()
-            .id(UUID.randomUUID().toString())
-            .recording(recording)
-            .status(SummaryEntity.SummaryStatus.PENDING)
-            .retryCount(0)
-            .build();
+                .id(UUID.randomUUID().toString())
+                .recording(recording)
+                .status(SummaryEntity.SummaryStatus.PENDING)
+                .retryCount(0)
+                .build();
         summaryRepository.save(summary);
 
         summaryService.summarize(recording.getId(), language);
@@ -236,11 +236,11 @@ public class RecordingServiceImpl implements RecordingService {
 
         // Создаём сущность суммаризации
         SummaryEntity summary = SummaryEntity.builder()
-            .id(UUID.randomUUID().toString())
-            .recording(recording)
-            .status(SummaryEntity.SummaryStatus.PENDING)
-            .retryCount(0)
-            .build();
+                .id(UUID.randomUUID().toString())
+                .recording(recording)
+                .status(SummaryEntity.SummaryStatus.PENDING)
+                .retryCount(0)
+                .build();
         summaryRepository.save(summary);
 
         // Запускаем асинхронную суммаризацию
@@ -254,7 +254,7 @@ public class RecordingServiceImpl implements RecordingService {
 
         if (file.getSize() > maxFileSize) {
             throw new IllegalArgumentException(
-                "File size exceeds limit: " + file.getSize() + " > " + maxFileSize);
+                    "File size exceeds limit: " + file.getSize() + " > " + maxFileSize);
         }
 
         String filename = file.getOriginalFilename();
@@ -262,11 +262,31 @@ public class RecordingServiceImpl implements RecordingService {
             throw new IllegalArgumentException("Only WAV files are supported");
         }
     }
+
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) {
             return ".wav";
         }
         return filename.substring(filename.lastIndexOf(".")).toLowerCase();
+    }
+
+    /**
+     * Подготавливает финальное имя файла, добавляя расширение при необходимости
+     */
+    private String prepareFilename(String filename, String originalExtension) {
+        if (filename == null) {
+            return null;
+        }
+
+        // Если имя уже имеет допустимое расширение, возвращаем как есть
+        if (filename.toLowerCase().endsWith(".wav") ||
+                filename.toLowerCase().endsWith(".mp3") ||
+                filename.contains(".")) {
+            return filename;
+        }
+
+        // Иначе добавляем оригинальное расширение
+        return filename + originalExtension;
     }
 
     @Override
@@ -281,7 +301,7 @@ public class RecordingServiceImpl implements RecordingService {
 
         // Привязываем к пользователю
         RecordingEntity recording = recordingRepository.findById(response.getId())
-            .orElseThrow(() -> new IllegalStateException("Recording not found after upload"));
+                .orElseThrow(() -> new IllegalStateException("Recording not found after upload"));
 
         recording.setUserId(userId);
         recordingRepository.save(recording);
@@ -293,48 +313,48 @@ public class RecordingServiceImpl implements RecordingService {
     @Transactional(readOnly = true)
     public Optional<RecordingResponse> getRecordingById(String id, String userId) {
         return recordingRepository.findById(id)
-            .filter(recording -> userId.equals(recording.getUserId()))
-            .map(entity -> RecordingResponse.fromEntity(entity, ""));
+                .filter(recording -> userId.equals(recording.getUserId()))
+                .map(entity -> RecordingResponse.fromEntity(entity, ""));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<RecordingResponse> getUserRecordings(String userId, Pageable pageable) {
         return recordingRepository.findByUserId(userId, pageable)
-            .map(entity -> RecordingResponse.fromEntity(entity, ""));
+                .map(entity -> RecordingResponse.fromEntity(entity, ""));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<RecordingResponse> getAllUserRecordings(String userId) {
         return recordingRepository.findByUserId(userId)
-            .stream()
-            .map(entity -> RecordingResponse.fromEntity(entity, ""))
-            .toList();
+                .stream()
+                .map(entity -> RecordingResponse.fromEntity(entity, ""))
+                .toList();
     }
 
     @Override
     @Transactional
     public boolean deleteRecording(String id, String userId) {
         return recordingRepository.findById(id)
-            .filter(recording -> userId.equals(recording.getUserId()))
-            .map(recording -> {
-                // Удаление файла
-                try {
-                    Path filePath = Paths.get(storagePath, recording.getFilename());
-                    Files.deleteIfExists(filePath);
-                    log.info("Deleted file: {}", filePath);
-                } catch (IOException e) {
-                    log.warn("Failed to delete file: {}", e.getMessage());
-                }
+                .filter(recording -> userId.equals(recording.getUserId()))
+                .map(recording -> {
+                    // Удаление файла
+                    try {
+                        Path filePath = Paths.get(storagePath, recording.getFilename());
+                        Files.deleteIfExists(filePath);
+                        log.info("Deleted file: {}", filePath);
+                    } catch (IOException e) {
+                        log.warn("Failed to delete file: {}", e.getMessage());
+                    }
 
-                // Удаление сущности
-                recordingRepository.delete(recording);
-                log.info("Recording deleted from database: {}", id);
+                    // Удаление сущности
+                    recordingRepository.delete(recording);
+                    log.info("Recording deleted from database: {}", id);
 
-                return true;
-            })
-            .orElse(false);
+                    return true;
+                })
+                .orElse(false);
     }
 
     @Override
@@ -343,36 +363,32 @@ public class RecordingServiceImpl implements RecordingService {
         log.info("Renaming recording: {} to {}", id, newFilename);
 
         return recordingRepository.findById(id)
-            .map(recording -> {
-                String oldFilename = recording.getFilename();
-                String extension = getExtension(oldFilename);
-                
-                // Если новое имя не имеет расширения, добавляем старое
-                if (!newFilename.toLowerCase().endsWith(".wav") && 
-                    !newFilename.toLowerCase().endsWith(".mp3") &&
-                    !newFilename.contains(".")) {
-                    newFilename = newFilename + extension;
-                }
-                
-                recording.setOriginalFilename(newFilename);
-                recordingRepository.save(recording);
-                
-                // Переименовываем файл на диске
-                try {
-                    Path oldPath = Paths.get(storagePath, oldFilename);
-                    Path newPath = Paths.get(storagePath, newFilename);
-                    if (Files.exists(oldPath)) {
-                        Files.move(oldPath, newPath);
-                        log.info("File renamed: {} -> {}", oldFilename, newFilename);
+                .map(recording -> {
+                    String oldFilename = recording.getFilename();
+                    String extension = getExtension(oldFilename);
+
+                    // ✅ Подготавливаем финальное имя до использования в лямбде
+                    String finalFilename = prepareFilename(newFilename, extension);
+
+                    recording.setOriginalFilename(finalFilename);
+                    recordingRepository.save(recording);
+
+                    // Переименовываем файл на диске
+                    try {
+                        Path oldPath = Paths.get(storagePath, oldFilename);
+                        Path newPath = Paths.get(storagePath, finalFilename);
+                        if (Files.exists(oldPath)) {
+                            Files.move(oldPath, newPath);
+                            log.info("File renamed: {} -> {}", oldFilename, finalFilename);
+                        }
+                    } catch (IOException e) {
+                        log.warn("Failed to rename file: {}", e.getMessage());
                     }
-                } catch (IOException e) {
-                    log.warn("Failed to rename file: {}", e.getMessage());
-                }
-                
-                log.info("Recording renamed successfully: id={}, newFilename={}", id, newFilename);
-                return true;
-            })
-            .orElse(false);
+
+                    log.info("Recording renamed successfully: id={}, newFilename={}", id, finalFilename);
+                    return true;
+                })
+                .orElse(false);
     }
 
     @Override
@@ -381,36 +397,32 @@ public class RecordingServiceImpl implements RecordingService {
         log.info("Renaming recording: {} to {} for user: {}", id, newFilename, userId);
 
         return recordingRepository.findById(id)
-            .filter(recording -> userId.equals(recording.getUserId()))
-            .map(recording -> {
-                String oldFilename = recording.getFilename();
-                String extension = getExtension(oldFilename);
-                
-                // Если новое имя не имеет расширения, добавляем старое
-                if (!newFilename.toLowerCase().endsWith(".wav") && 
-                    !newFilename.toLowerCase().endsWith(".mp3") &&
-                    !newFilename.contains(".")) {
-                    newFilename = newFilename + extension;
-                }
-                
-                recording.setOriginalFilename(newFilename);
-                recordingRepository.save(recording);
-                
-                // Переименовываем файл на диске
-                try {
-                    Path oldPath = Paths.get(storagePath, oldFilename);
-                    Path newPath = Paths.get(storagePath, newFilename);
-                    if (Files.exists(oldPath)) {
-                        Files.move(oldPath, newPath);
-                        log.info("File renamed: {} -> {}", oldFilename, newFilename);
+                .filter(recording -> userId.equals(recording.getUserId()))
+                .map(recording -> {
+                    String oldFilename = recording.getFilename();
+                    String extension = getExtension(oldFilename);
+
+                    // ✅ Подготавливаем финальное имя до использования в лямбде
+                    String finalFilename = prepareFilename(newFilename, extension);
+
+                    recording.setOriginalFilename(finalFilename);
+                    recordingRepository.save(recording);
+
+                    // Переименовываем файл на диске
+                    try {
+                        Path oldPath = Paths.get(storagePath, oldFilename);
+                        Path newPath = Paths.get(storagePath, finalFilename);
+                        if (Files.exists(oldPath)) {
+                            Files.move(oldPath, newPath);
+                            log.info("File renamed: {} -> {}", oldFilename, finalFilename);
+                        }
+                    } catch (IOException e) {
+                        log.warn("Failed to rename file: {}", e.getMessage());
                     }
-                } catch (IOException e) {
-                    log.warn("Failed to rename file: {}", e.getMessage());
-                }
-                
-                log.info("Recording renamed successfully: id={}, newFilename={}, userId={}", id, newFilename, userId);
-                return true;
-            })
-            .orElse(false);
+
+                    log.info("Recording renamed successfully: id={}, newFilename={}, userId={}", id, finalFilename, userId);
+                    return true;
+                })
+                .orElse(false);
     }
 }
