@@ -1,9 +1,11 @@
-```
+
 # Compiled and build artifacts
 *.class
 *.o
 *.obj
 *.out
+.pio
+*.wav
 
 # Dependencies
 target/
@@ -46,4 +48,3 @@ hs_err_pid*
 # Build system
 build/
 dist/
-```

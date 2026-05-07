@@ -1,0 +1,20 @@
+2026-05-06 17:59:01.905370+03:00 jdbc[4]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Таблица "RECORDINGS" уже существует
+Table "RECORDINGS" already exists; SQL statement:
+CREATE TABLE recordings
+(
+    id                VARCHAR(36)  NOT NULL,
+    filename          VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255),
+    file_size         BIGINT       NOT NULL,
+    content_type      VARCHAR(100),
+    device_info       VARCHAR(255),
+    device_ip         VARCHAR(45),
+    duration_seconds  INTEGER,
+    sample_rate       INTEGER,
+    channels          INTEGER,
+    status            VARCHAR(50)  NOT NULL,
+    created_at        TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    updated_at        TIMESTAMP WITHOUT TIME ZONE,
+    CONSTRAINT pk_recordings PRIMARY KEY (id)
+) [42101-224]
