@@ -1,5 +1,6 @@
 package com.example.recorder.controller;
 
+import com.example.recorder.auth.DeviceAuthService;
 import com.example.recorder.dto.ApiResponse;
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.RecordingsListResponse;
@@ -7,6 +8,7 @@ import com.example.recorder.dto.UploadRecordingRequest;
 import com.example.recorder.service.recording.RecordingService;
 import com.example.recorder.service.summary.SummaryService;
 import com.example.recorder.util.TempMultipartFile;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +58,7 @@ public class RecordingController {
     
     private final RecordingService recordingService;
     private final SummaryService summaryService;
+    private final DeviceAuthService deviceAuthService;
     
     /**
      * Загрузка WAV-файла с ESP32-C6 устройства (multipart/form-data).
@@ -127,29 +130,26 @@ public class RecordingController {
      * Токен авторизации передаётся в заголовке X-Device-Token.
      * Автоматически запускает суммаризацию (если включено в конфигурации).
      */
-    @PostMapping(value = "/recordings/upload-raw", 
+    @PostMapping(value = {"/recordings/upload-raw", "/data/upload"},
                  consumes = "audio/wav",
                  produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ApiResponse<RecordingResponse>> uploadRecordingRaw(
             @RequestBody byte[] audioData,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
             @RequestHeader(value = "X-Device-Token", required = false) String deviceToken,
             @RequestHeader(value = "X-Device-Info", required = false, defaultValue = "ESP32-C6-Recorder") 
             String deviceInfo,
             @RequestHeader(value = "X-Forwarded-For", required = false) String xForwardedFor,
-            @RequestHeader(value = "X-Real-IP", required = false) String xRealIp) {
+            @RequestHeader(value = "X-Real-IP", required = false) String xRealIp,
+            HttpServletRequest servletRequest) {
         
-        String clientIp = getClientIp(xForwardedFor, xRealIp);
-        
-        // Валидация токена авторизации
-        if (deviceToken == null || deviceToken.isBlank()) {
-            log.warn("Missing device token from IP: {}", clientIp);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Device token is required");
+        String clientIp = getClientIp(servletRequest, xForwardedFor, xRealIp);
+        String authenticatedDevice = resolveAuthenticatedDevice(authorizationHeader, deviceToken);
+        if (authenticatedDevice != null) {
+            log.info("Raw upload authenticated as device={} from IP={}", authenticatedDevice, clientIp);
+        } else {
+            log.info("Raw upload accepted in compatibility mode from IP={}", clientIp);
         }
-        
-        // Здесь можно добавить проверку токена против базы разрешённых устройств
-        // Например: deviceAuthService.validateToken(deviceToken);
-        log.info("Device token received: {} (validation skipped in demo mode)", 
-                 deviceToken.substring(0, Math.min(8, deviceToken.length())) + "...");
         
         if (audioData == null || audioData.length == 0) {
             throw new IllegalArgumentException("Audio data is empty");
@@ -358,13 +358,28 @@ public class RecordingController {
     /**
      * Определение IP адреса клиента.
      */
-    private String getClientIp(String xForwardedFor, String xRealIp) {
+    private String getClientIp(HttpServletRequest request, String xForwardedFor, String xRealIp) {
         if (xForwardedFor != null && !xForwardedFor.isBlank()) {
             return xForwardedFor.split(",")[0].trim();
         }
         if (xRealIp != null && !xRealIp.isBlank()) {
             return xRealIp;
         }
-        return "unknown";
+        return request != null ? request.getRemoteAddr() : "unknown";
+    }
+
+    private String getClientIp(String xForwardedFor, String xRealIp) {
+        return getClientIp(null, xForwardedFor, xRealIp);
+    }
+
+    private String resolveAuthenticatedDevice(String authorizationHeader, String deviceToken) {
+        if (authorizationHeader != null && !authorizationHeader.isBlank()) {
+            return deviceAuthService.validateAuthorizationHeader(authorizationHeader)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid bearer token"));
+        }
+        if (deviceToken != null && !deviceToken.isBlank()) {
+            return "legacy-device";
+        }
+        return null;
     }
 }

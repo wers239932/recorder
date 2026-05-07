@@ -1,0 +1,61 @@
+package com.example.recorder.controller;
+
+import com.example.recorder.auth.DeviceAuthService;
+import com.example.recorder.dto.ApiResponse;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/v1")
+@RequiredArgsConstructor
+public class DeviceIntegrationController {
+
+    private final DeviceAuthService deviceAuthService;
+
+    @PostMapping("/auth/login")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody LoginRequest request) {
+        DeviceAuthService.AuthenticationResult auth =
+            deviceAuthService.authenticate(request.login(), request.passwordHash());
+        if (!auth.success()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid device credentials");
+        }
+
+        log.info("Device authenticated: {}", auth.login());
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+            "token", auth.token(),
+            "expires_in", auth.expiresIn()
+        )));
+    }
+
+    @GetMapping("/device/command")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getCommand(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        String login = deviceAuthService.validateAuthorizationHeader(authorizationHeader)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid bearer token"));
+
+        DeviceAuthService.RemoteCommand command = deviceAuthService.currentCommandFor(login);
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+            "recording", command.recording(),
+            "sequence", command.sequence()
+        )));
+    }
+
+    public record LoginRequest(
+            String login,
+            @JsonProperty("password_hash") String passwordHash) {
+    }
+}

@@ -8,10 +8,12 @@ import com.example.recorder.repository.RecordingRepository;
 import com.example.recorder.repository.SummaryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
@@ -33,6 +35,9 @@ public class SummaryServiceImpl implements SummaryService {
     private final SummaryRepository summaryRepository;
     private final RecordingRepository recordingRepository;
     private final SummaryClientProperties properties;
+
+    @Value("${recorder.storage.path:./recordings}")
+    private String storagePath;
     
     @Override
     @Async("summaryExecutor")
@@ -68,9 +73,9 @@ public class SummaryServiceImpl implements SummaryService {
             .orElseThrow(() -> new IllegalArgumentException("Recording not found: " + recordingId));
         
         // Проверяем файл
-        Path audioPath = Paths.get(recording.getFilename());
+        Path audioPath = Paths.get(storagePath, recording.getFilename());
         if (!java.nio.file.Files.exists(audioPath)) {
-            throw new IllegalStateException("Audio file not found: " + recording.getFilename());
+            throw new IllegalStateException("Audio file not found: " + audioPath);
         }
         
         // Обновляем статус записи
@@ -96,7 +101,7 @@ public class SummaryServiceImpl implements SummaryService {
         summaryRepository.save(summary);
         
         // Вызываем внешний сервис суммаризации
-        var clientResult = summaryClient.summarize(recordingId, recording.getFilename(), language).block();
+        var clientResult = summaryClient.summarize(recordingId, audioPath.toString(), language).block();
         
         if (clientResult == null || clientResult.status() == SummaryClient.SummarizationStatus.FAILED) {
             // Обработка ошибки
@@ -133,7 +138,9 @@ public class SummaryServiceImpl implements SummaryService {
         summary.setKeywords(clientResult.keywords() != null 
             ? String.join(",", clientResult.keywords()) 
             : null);
-        summary.setConfidenceScore(clientResult.confidenceScore());
+        summary.setConfidenceScore(clientResult.confidenceScore() != null
+            ? BigDecimal.valueOf(clientResult.confidenceScore())
+            : null);
         summary.setDetectedLanguage(clientResult.detectedLanguage());
         summary.setCompletedAt(LocalDateTime.now());
         summaryRepository.save(summary);

@@ -1,0 +1,2 @@
+-- Reserved migration.
+-- The baseline schema is defined in V1 and kept portable for both H2 and PostgreSQL.

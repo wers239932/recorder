@@ -33,6 +33,7 @@ private:
     static uint64_t now_ms();
     static std::string sha256_hex(const std::string& input);
     static std::string trim(const std::string& value);
+    static std::string normalize_url(const std::string& value, const char* field_name);
     static std::string derive_upload_url(const std::string& login_url);
     static std::string derive_command_url(const std::string& login_url);
     bool load_config(const char* configPath);

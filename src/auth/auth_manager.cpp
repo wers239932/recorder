@@ -24,6 +24,15 @@ struct HttpResponseBuffer {
     std::string body;
 };
 
+const cJSON* unwrap_api_response_data(const cJSON* root) {
+    if (!root || !cJSON_IsObject(root)) {
+        return nullptr;
+    }
+
+    const cJSON* data = cJSON_GetObjectItemCaseSensitive(root, "data");
+    return cJSON_IsObject(data) ? data : root;
+}
+
 esp_err_t http_event_handler(esp_http_client_event_t* evt) {
     if (!evt || !evt->user_data) {
         return ESP_OK;
@@ -52,6 +61,28 @@ std::string AuthManager::trim(const std::string& value) {
         --end;
     }
     return value.substr(start, end - start);
+}
+
+std::string AuthManager::normalize_url(const std::string& value, const char* field_name) {
+    std::string url = trim(value);
+    if (url.empty()) {
+        return url;
+    }
+
+    if (url.rfind("https://", 0) == 0) {
+        std::string downgraded = "http://" + url.substr(std::strlen("https://"));
+        ESP_LOGW(TAG_AUTH, "%s uses HTTPS, but firmware only supports plain HTTP. Downgrading to %s",
+                 field_name, downgraded.c_str());
+        return downgraded;
+    }
+
+    if (url.rfind("http://", 0) != 0) {
+        std::string with_scheme = "http://" + url;
+        ESP_LOGW(TAG_AUTH, "%s has no URL scheme. Assuming %s", field_name, with_scheme.c_str());
+        return with_scheme;
+    }
+
+    return url;
 }
 
 std::string AuthManager::derive_upload_url(const std::string& login_url) {
@@ -156,9 +187,13 @@ bool AuthManager::load_config(const char* configPath) {
 
     config_.login = trim(login->valuestring ? login->valuestring : "");
     config_.password = password->valuestring ? password->valuestring : "";
-    config_.server_url = trim(server_url->valuestring ? server_url->valuestring : "");
-    config_.upload_url = cJSON_IsString(upload_url) && upload_url->valuestring ? trim(upload_url->valuestring) : "";
-    config_.command_url = cJSON_IsString(command_url) && command_url->valuestring ? trim(command_url->valuestring) : "";
+    config_.server_url = normalize_url(server_url->valuestring ? server_url->valuestring : "", "server_url");
+    config_.upload_url = cJSON_IsString(upload_url) && upload_url->valuestring
+        ? normalize_url(upload_url->valuestring, "upload_url")
+        : "";
+    config_.command_url = cJSON_IsString(command_url) && command_url->valuestring
+        ? normalize_url(command_url->valuestring, "command_url")
+        : "";
     cJSON_Delete(root);
 
     if (config_.login.empty() || config_.password.empty() || config_.server_url.empty()) {
@@ -168,6 +203,8 @@ bool AuthManager::load_config(const char* configPath) {
 
     upload_url_ = config_.upload_url.empty() ? derive_upload_url(config_.server_url) : config_.upload_url;
     command_url_ = config_.command_url.empty() ? derive_command_url(config_.server_url) : config_.command_url;
+    ESP_LOGI(TAG_AUTH, "Auth endpoints: login=%s upload=%s command=%s",
+             config_.server_url.c_str(), upload_url_.c_str(), command_url_.c_str());
     config_loaded_ = true;
     return true;
 }
@@ -211,9 +248,12 @@ bool AuthManager::request_token() {
     esp_http_client_config_t http_cfg = {};
     http_cfg.url = config_.server_url.c_str();
     http_cfg.method = HTTP_METHOD_POST;
-    http_cfg.timeout_ms = 5000;
+    http_cfg.timeout_ms = 10000;
     http_cfg.event_handler = http_event_handler;
     http_cfg.user_data = &response;
+    http_cfg.disable_auto_redirect = false;
+
+    ESP_LOGI(TAG_AUTH, "Requesting auth token from %s", config_.server_url.c_str());
 
     esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
     if (!client) {
@@ -249,10 +289,11 @@ bool AuthManager::request_token() {
         return false;
     }
 
-    const cJSON* token = cJSON_GetObjectItemCaseSensitive(response_root, "token");
-    const cJSON* expires_in = cJSON_GetObjectItemCaseSensitive(response_root, "expires_in");
+    const cJSON* payload = unwrap_api_response_data(response_root);
+    const cJSON* token = cJSON_GetObjectItemCaseSensitive(payload, "token");
+    const cJSON* expires_in = cJSON_GetObjectItemCaseSensitive(payload, "expires_in");
     if (!cJSON_IsString(token) || !token->valuestring || !cJSON_IsNumber(expires_in)) {
-        LOG_ERROR("auth response missing token or expires_in");
+        LOG_ERROR("auth response missing token or expires_in: %s", response.body.c_str());
         cJSON_Delete(response_root);
         offline_mode_ = true;
         return false;
@@ -280,9 +321,10 @@ bool AuthManager::perform_authorized_get(const std::string& url, std::string& re
     esp_http_client_config_t http_cfg = {};
     http_cfg.url = url.c_str();
     http_cfg.method = HTTP_METHOD_GET;
-    http_cfg.timeout_ms = 5000;
+    http_cfg.timeout_ms = 10000;
     http_cfg.event_handler = http_event_handler;
     http_cfg.user_data = &response;
+    http_cfg.disable_auto_redirect = false;
 
     esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
     if (!client) {
@@ -354,10 +396,11 @@ bool AuthManager::fetchRemoteCommand(RemoteCommand& out_command) {
         return false;
     }
 
-    const cJSON* recording = cJSON_GetObjectItemCaseSensitive(response_root, "recording");
-    const cJSON* sequence = cJSON_GetObjectItemCaseSensitive(response_root, "sequence");
+    const cJSON* payload = unwrap_api_response_data(response_root);
+    const cJSON* recording = cJSON_GetObjectItemCaseSensitive(payload, "recording");
+    const cJSON* sequence = cJSON_GetObjectItemCaseSensitive(payload, "sequence");
     if (!cJSON_IsBool(recording) || !cJSON_IsNumber(sequence)) {
-        LOG_ERROR("command response missing recording/sequence");
+        LOG_ERROR("command response missing recording/sequence: %s", response_body.c_str());
         cJSON_Delete(response_root);
         offline_mode_ = true;
         return false;

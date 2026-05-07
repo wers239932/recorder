@@ -66,7 +66,7 @@ public class RecordingResponse {
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
             .summary(summary)
-            .downloadUrl(baseUrl + "/api/recordings/" + entity.getId() + "/download")
+            .downloadUrl(baseUrl + "/api/v1/recordings/" + entity.getId() + "/download")
             .build();
     }
 }

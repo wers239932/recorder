@@ -43,7 +43,9 @@ public class SummaryResponse {
             .keywords(entity.getKeywords() != null 
                 ? java.util.Arrays.asList(entity.getKeywords().split(",")) 
                 : null)
-            .confidenceScore(entity.getConfidenceScore())
+            .confidenceScore(entity.getConfidenceScore() != null
+                ? entity.getConfidenceScore().doubleValue()
+                : null)
             .detectedLanguage(entity.getDetectedLanguage())
             .status(entity.getStatus())
             .errorMessage(entity.getErrorMessage())

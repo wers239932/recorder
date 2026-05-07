@@ -2,22 +2,21 @@ spring:
   application:
     name: recorder-server
   
-  # Конфигурация базы данных (H2 для разработки)
   datasource:
-    url: jdbc:h2:file:./data/recorder-db;DB_CLOSE_ON_EXIT=FALSE;DB_CLOSE_DELAY=-1
-    username: sa
-    password: 
-    driver-class-name: org.h2.Driver
-  
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/recorder-db;AUTO_SERVER=TRUE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+
   h2:
     console:
       enabled: true
       path: /h2-console
   
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.H2Dialect}
     hibernate:
-      ddl-auto: validate  # Используем Flyway для миграций
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -41,6 +40,8 @@ server:
 
 # Настройки хранилища файлов
 recorder:
+  flyway:
+    auto-repair-on-startup: true
   storage:
     path: ./recordings
     max-file-size: 104857600  # 100MB

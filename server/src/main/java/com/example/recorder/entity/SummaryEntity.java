@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -56,7 +57,7 @@ public class SummaryEntity {
      * Уверенность модели суммаризации (0.0 - 1.0).
      */
     @Column(name = "confidence_score", precision = 5, scale = 4)
-    private Double confidenceScore;
+    private BigDecimal confidenceScore;
     
     /**
      * Язык распознанной речи (ISO 639-1).

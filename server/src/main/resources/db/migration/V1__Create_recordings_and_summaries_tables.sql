@@ -1,8 +1,4 @@
--- V1__Create_recordings_and_summaries_tables.sql
--- Создание таблиц для аудио записей и суммаризаций
-
--- Таблица аудио записей
-CREATE TABLE recordings (
+CREATE TABLE IF NOT EXISTS recordings (
     id VARCHAR(36) PRIMARY KEY,
     filename VARCHAR(255) NOT NULL,
     original_filename VARCHAR(255),
@@ -15,17 +11,15 @@ CREATE TABLE recordings (
     channels INTEGER,
     status VARCHAR(50) NOT NULL DEFAULT 'UPLOADED',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Индексы для оптимизации поиска
-CREATE INDEX idx_recordings_status ON recordings(status);
-CREATE INDEX idx_recordings_device_info ON recordings(device_info);
-CREATE INDEX idx_recordings_created_at ON recordings(created_at DESC);
-CREATE INDEX idx_recordings_filename ON recordings(filename);
+CREATE INDEX IF NOT EXISTS idx_recordings_status ON recordings(status);
+CREATE INDEX IF NOT EXISTS idx_recordings_device_info ON recordings(device_info);
+CREATE INDEX IF NOT EXISTS idx_recordings_created_at ON recordings(created_at);
+CREATE INDEX IF NOT EXISTS idx_recordings_filename ON recordings(filename);
 
--- Таблица суммаризаций
-CREATE TABLE summaries (
+CREATE TABLE IF NOT EXISTS summaries (
     id VARCHAR(36) PRIMARY KEY,
     recording_id VARCHAR(36) NOT NULL UNIQUE,
     summary_text TEXT,
@@ -39,16 +33,11 @@ CREATE TABLE summaries (
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_summaries_recording FOREIGN KEY (recording_id) 
         REFERENCES recordings(id) ON DELETE CASCADE
 );
 
--- Индексы для суммаризаций
-CREATE INDEX idx_summaries_status ON summaries(status);
-CREATE INDEX idx_summaries_recording_id ON summaries(recording_id);
-CREATE INDEX idx_summaries_created_at ON summaries(created_at DESC);
-
--- Комментарий к таблицам
-COMMENT ON TABLE recordings IS 'Аудио записи с ESP32-C6 устройства';
-COMMENT ON TABLE summaries IS 'Результаты суммаризации аудио записей';
+CREATE INDEX IF NOT EXISTS idx_summaries_status ON summaries(status);
+CREATE INDEX IF NOT EXISTS idx_summaries_recording_id ON summaries(recording_id);
+CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at);

@@ -281,7 +281,7 @@ void HttpUploader::upload_task(void* arg) {
         ESP_LOGI(TAG_HTTP, "ESP IP: " IPSTR, IP2STR(&ip_info.ip));
     }
 
-    if (s_auth_manager) {
+    if (s_auth_manager && s_auth_manager->hasConfig()) {
         token = s_auth_manager->getToken();
         if (token.empty()) {
             ESP_LOGE(TAG_HTTP, "No auth token available; upload deferred");
