@@ -338,12 +338,79 @@ public class RecordingServiceImpl implements RecordingService {
     }
 
     @Override
+    @Transactional
     public boolean renameRecording(String id, String newFilename) {
-        return false;
+        log.info("Renaming recording: {} to {}", id, newFilename);
+
+        return recordingRepository.findById(id)
+            .map(recording -> {
+                String oldFilename = recording.getFilename();
+                String extension = getExtension(oldFilename);
+                
+                // Если новое имя не имеет расширения, добавляем старое
+                if (!newFilename.toLowerCase().endsWith(".wav") && 
+                    !newFilename.toLowerCase().endsWith(".mp3") &&
+                    !newFilename.contains(".")) {
+                    newFilename = newFilename + extension;
+                }
+                
+                recording.setOriginalFilename(newFilename);
+                recordingRepository.save(recording);
+                
+                // Переименовываем файл на диске
+                try {
+                    Path oldPath = Paths.get(storagePath, oldFilename);
+                    Path newPath = Paths.get(storagePath, newFilename);
+                    if (Files.exists(oldPath)) {
+                        Files.move(oldPath, newPath);
+                        log.info("File renamed: {} -> {}", oldFilename, newFilename);
+                    }
+                } catch (IOException e) {
+                    log.warn("Failed to rename file: {}", e.getMessage());
+                }
+                
+                log.info("Recording renamed successfully: id={}, newFilename={}", id, newFilename);
+                return true;
+            })
+            .orElse(false);
     }
 
     @Override
+    @Transactional
     public boolean renameRecording(String id, String newFilename, String userId) {
-        return false;
+        log.info("Renaming recording: {} to {} for user: {}", id, newFilename, userId);
+
+        return recordingRepository.findById(id)
+            .filter(recording -> userId.equals(recording.getUserId()))
+            .map(recording -> {
+                String oldFilename = recording.getFilename();
+                String extension = getExtension(oldFilename);
+                
+                // Если новое имя не имеет расширения, добавляем старое
+                if (!newFilename.toLowerCase().endsWith(".wav") && 
+                    !newFilename.toLowerCase().endsWith(".mp3") &&
+                    !newFilename.contains(".")) {
+                    newFilename = newFilename + extension;
+                }
+                
+                recording.setOriginalFilename(newFilename);
+                recordingRepository.save(recording);
+                
+                // Переименовываем файл на диске
+                try {
+                    Path oldPath = Paths.get(storagePath, oldFilename);
+                    Path newPath = Paths.get(storagePath, newFilename);
+                    if (Files.exists(oldPath)) {
+                        Files.move(oldPath, newPath);
+                        log.info("File renamed: {} -> {}", oldFilename, newFilename);
+                    }
+                } catch (IOException e) {
+                    log.warn("Failed to rename file: {}", e.getMessage());
+                }
+                
+                log.info("Recording renamed successfully: id={}, newFilename={}, userId={}", id, newFilename, userId);
+                return true;
+            })
+            .orElse(false);
     }
 }
