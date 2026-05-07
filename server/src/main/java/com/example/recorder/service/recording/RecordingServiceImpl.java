@@ -165,6 +165,11 @@ public class RecordingServiceImpl implements RecordingService {
     }
 
     @Override
+    public Optional<Path> getRecordingFilePath(String id, String userId) {
+        return Optional.empty();
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public long[] getStorageStats() {
         long count = recordingRepository.count();
@@ -172,6 +177,11 @@ public class RecordingServiceImpl implements RecordingService {
             .mapToLong(RecordingEntity::getFileSize)
             .sum();
         return new long[]{count, totalSize};
+    }
+
+    @Override
+    public long[] getUserStorageStats(String userId) {
+        return new long[0];
     }
 
     @Override
@@ -196,6 +206,11 @@ public class RecordingServiceImpl implements RecordingService {
         summaryRepository.save(summary);
 
         summaryService.summarize(recording.getId(), language);
+    }
+
+    @Override
+    public void startSummarization(String recordingId, String language, String userId) {
+
     }
 
     @Override
@@ -320,5 +335,15 @@ public class RecordingServiceImpl implements RecordingService {
                 return true;
             })
             .orElse(false);
+    }
+
+    @Override
+    public boolean renameRecording(String id, String newFilename) {
+        return false;
+    }
+
+    @Override
+    public boolean renameRecording(String id, String newFilename, String userId) {
+        return false;
     }
 }

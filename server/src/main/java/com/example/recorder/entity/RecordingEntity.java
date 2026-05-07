@@ -1,4 +1,4 @@
->>>>package com.example.recorder.entity;
+package com.example.recorder.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

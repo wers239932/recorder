@@ -18,3 +18,10 @@ CREATE TABLE recordings
     updated_at        TIMESTAMP WITHOUT TIME ZONE,
     CONSTRAINT pk_recordings PRIMARY KEY (id)
 ) [42101-224]
+2026-05-07 20:03:28.545882+03:00 jdbc[4]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Синтаксическая ошибка в выражении SQL "-- Добавляем поле user_id в таблицу recordings\000d\000aALTER TABLE recordings \000d\000aADD COLUMN user_id VARCHAR(36)[*],\000d\000aADD COLUMN user_recording_name VARCHAR(255)"
+Syntax error in SQL statement "-- Добавляем поле user_id в таблицу recordings\000d\000aALTER TABLE recordings \000d\000aADD COLUMN user_id VARCHAR(36)[*],\000d\000aADD COLUMN user_recording_name VARCHAR(255)"; SQL statement:
+-- Добавляем поле user_id в таблицу recordings
+ALTER TABLE recordings 
+ADD COLUMN user_id VARCHAR(36),
+ADD COLUMN user_recording_name VARCHAR(255) [42000-224]

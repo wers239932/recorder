@@ -1,4 +1,4 @@
-аpackage com.example.recorder.service.summary;
+package com.example.recorder.service.summary;
 
 import com.example.recorder.client.summary.SummaryClient;
 import com.example.recorder.config.SummaryClientProperties;
@@ -6,6 +6,7 @@ import com.example.recorder.entity.RecordingEntity;
 import com.example.recorder.entity.SummaryEntity;
 import com.example.recorder.repository.RecordingRepository;
 import com.example.recorder.repository.SummaryRepository;
+import com.example.recorder.service.summary.SummaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,7 +65,6 @@ public class SummaryServiceImpl implements SummaryService {
     }
     
     @Override
-    public void summarize(String recordingId, fire-and-forget
     public void summarize(String recordingId, String language) {
         log.info("Starting summarization for recording: {}", recordingId);
         summarizeAsync(recordingId, language);
