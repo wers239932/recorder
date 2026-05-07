@@ -2,6 +2,7 @@ package com.example.recorder.service.recording;
 
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.UploadRecordingRequest;
+import com.example.recorder.entity.RecordingEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
@@ -123,6 +124,15 @@ public interface RecordingService {
      * Запуск суммаризации для записи с проверкой доступа пользователя.
      */
     void startSummarization(String recordingId, String language, String userId);
+
+    /**
+     * Запуск суммаризации для уже загруженной сущности записи.
+     * Оптимизированный метод, избегает повторного запроса в БД.
+     *
+     * @param recording Сущность записи
+     * @param language Код языка (опционально)
+     */
+    void startSummarizationForEntity(RecordingEntity recording, String language);
 
     /**
      * Получение статуса суммаризации.

@@ -29,29 +29,35 @@ public interface SummaryService {
     SummarizationResult summarizeSync(String recordingId, String language);
     
     /**
+     * Запуск асинхронной суммаризации (без возврата результата).
+     * Упрощённый метод для вызова из RecordingService.
+     *
+     * @param recordingId ID записи
+     * @param language Код языка (опционально)
+     */
+    void summarize(String recordingId, String language);
+    /**
      * Повторная попытка суммаризации для неудачных записей.
-     * 
+     *
      * @param maxRetries Максимальное количество попыток
      * @return количество запущенных повторных обработок
      */
     int retryFailedSummarizations(int maxRetries);
-    
     /**
      * Отмена суммаризации для записи.
-     * 
+     *
      * @param recordingId ID записи
      * @return true если отменено успешно
      */
     boolean cancelSummarization(String recordingId);
-    
     /**
      * Проверка статуса суммаризации.
-     * 
+     *
      * @param recordingId ID записи
      * @return статус суммаризации
      */
     SummarizationStatus getStatus(String recordingId);
-    
+
     /**
      * Результат суммаризации.
      */
@@ -65,7 +71,7 @@ public interface SummaryService {
         String detectedLanguage,
         String errorMessage
     ) {}
-    
+
     /**
      * Статус суммаризации.
      */

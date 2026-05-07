@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 /**
  * Сущность аудио записи в базе данных.
- * Представляет загруженный WAV-файл с метаданными.
+ * Represents a loaded WAV file with metadata.
  */
 @Entity
 @Table(name = "recordings")
@@ -21,140 +21,140 @@ import java.time.LocalDateTime;
 public class RecordingEntity {
     
     /**
-     * Уникальный идентификатор записи (UUID).
+     * Unique record identifier (UUID).
      */
     @Id
     @Column(name = "id", length = 36)
     private String id;
     
     /**
-     * ID пользователя, которому принадлежит запись.
+     * ID of the user who owns the record.
      */
-    @Column(name = "user_id", length = 36, nullable = unchanged)
+    @Column(name = "user_id", length = 36)
     private String userId;
 
     /**
-     * Имя файла на диске.
+     * File name on disk.
      */
     @Column(name = "filename", nullable = false, length = 255)
     private String filename;
 
     /**
-     * Оригинальное имя файла (от устройства).
+     * Original file name (from device).
      */
     @Column(name = "original_filename", length = 255)
     private String originalFilename;
 
     /**
-     * Размер файла в байтах.
+     * File size in bytes.
      */
     @Column(name = "file_size", nullable = false)
     private Long fileSize;
 
     /**
-     * MIME тип контента (audio/wav).
+     * MIME type of content (audio/wav).
      */
     @Column(name = "content_type", length = 100)
     private String contentType;
 
     /**
-     * Информация об устройстве (ESP32-C6-Recorder).
+     * Device information (ESP32-C6-Recorder).
      */
     @Column(name = "device_info", length = 255)
     private String deviceInfo;
 
     /**
-     * IP адрес устройства, загрузившего файл.
+     * IP address of the device that uploaded the file.
      */
     @Column(name = "device_ip", length = 45)
     private String deviceIp;
     /**
-     * Длительность аудио в секундах (заполняется после анализа).
+     * Duration of audio in seconds (filled after analysis).
      */
     @Column(name = "duration_seconds")
     private Integer durationSeconds;
 
     /**
-     * Частота дискретизации (например, 16000 Hz).
+     * Sample rate (e.g., 16000 Hz).
      */
     @Column(name = "sample_rate")
     private Integer sampleRate;
 
     /**
-     * Количество каналов (1 = mono, 2 = stereo).
+     * Number of channels (1 = mono, 2 = stereo).
      */
     @Column(name = "channels")
     private Integer channels;
     /**
-     * Статус обработки записи.
+     * Processing status of the record.
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
     @Builder.Default
     private RecordingStatus status = RecordingStatus.UPLOADED;
     /**
-     * Дата и время создания записи.
+     * Date and time the record was created.
      */
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     /**
-     * Дата и время последнего обновления.
+     * Date and time of last update.
      */
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     /**
-     * Связь с пользователем.
+     * Relationship with the user.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private UserEntity user;
     /**
-     * Связь один-к-одному с суммаризацией.
+     * One-to-one relationship with summary.
      */
     @OneToOne(mappedBy = "recording", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private SummaryEntity summary;
 
     /**
-     * Связь один-к-одному с текстовой расшифровкой.
+     * One-to-one relationship with text transcription.
      */
     @OneToOne(mappedBy = "recording", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private TranscriptionEntity transcription;
     /**
-     * Статусы обработки записи.
+     * Processing statuses of the record.
      */
     public enum RecordingStatus {
         /**
-         * Файл загружен, ожидает обработки.
+         * File uploaded, awaiting processing.
          */
         UPLOADED,
         /**
-         * Файл анализируется (извлечение метаданных).
+         * File being analyzed (extracting metadata).
          */
         ANALYZING,
 
         /**
-         * Отправлено на суммаризацию.
+         * Sent for summarization.
          */
         SUMMARIZING,
 
         /**
-         * Суммаризация завершена успешно.
+         * Summarization completed successfully.
          */
         SUMMARIZED,
 
         /**
-         * Ошибка при суммаризации.
+         * Error during summarization.
          */
         SUMMARY_FAILED,
         /**
-         * Запись готова к использованию.
+         * Record ready for use.
          */
         READY,
         /**
-         * Общая ошибка обработки.
+         * General processing error.
          */
         FAILED
     }

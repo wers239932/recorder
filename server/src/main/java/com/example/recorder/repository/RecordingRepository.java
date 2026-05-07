@@ -21,15 +21,22 @@ import java.util.Optional;
 public interface RecordingRepository extends JpaRepository<RecordingEntity, String> {
     
     /**
+     * Поиск записей по ID пользователя.
+     */
+    Page<RecordingEntity> findByUserId(String userId, Pageable pageable);
+
+    /**
+     * Поиск всех записей по ID пользователя.
+     */
+    List<RecordingEntity> findByUserId(String userId);
+    /**
      * Поиск записей по статусу.
      */
     Page<RecordingEntity> findByStatus(RecordingStatus status, Pageable pageable);
-    
     /**
      * Поиск записей по устройству.
      */
     Page<RecordingEntity> findByDeviceInfo(String deviceInfo, Pageable pageable);
-    
     /**
      * Поиск записей по диапазону дат.
      */
@@ -39,34 +46,30 @@ public interface RecordingRepository extends JpaRepository<RecordingEntity, Stri
         @Param("to") LocalDateTime to,
         Pageable pageable
     );
-    
     /**
      * Поиск записей, ожидающих суммаризации.
      */
     @Query("SELECT r FROM RecordingEntity r WHERE r.status = 'SUMMARIZING' OR r.status = 'UPLOADED'")
     List<RecordingEntity> findPendingSummarization();
-    
     /**
      * Проверка существования файла по имени.
      */
     boolean existsByFilename(String filename);
-    
     /**
      * Поиск записи по оригинальному имени файла.
      */
     Optional<RecordingEntity> findByOriginalFilename(String originalFilename);
-    
     /**
      * Подсчёт записей по статусу.
      */
     long countByStatus(RecordingStatus status);
-    
+
     /**
      * Получение последних записей.
      */
     @Query("SELECT r FROM RecordingEntity r ORDER BY r.createdAt DESC")
     Page<RecordingEntity> findLatest(Pageable pageable);
-    
+
     /**
      * Удаление записей по статусу FAILED (для очистки).
      */

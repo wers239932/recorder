@@ -1,4 +1,4 @@
-package com.example.recorder.service.summary;
+аpackage com.example.recorder.service.summary;
 
 import com.example.recorder.client.summary.SummaryClient;
 import com.example.recorder.config.SummaryClientProperties;
@@ -64,24 +64,31 @@ public class SummaryServiceImpl implements SummaryService {
     }
     
     @Override
+    public void summarize(String recordingId, fire-and-forget
+    public void summarize(String recordingId, String language) {
+        log.info("Starting summarization for recording: {}", recordingId);
+        summarizeAsync(recordingId, language);
+    }
+
+    @Override
     @Transactional
     public SummarizationResult summarizeSync(String recordingId, String language) {
         log.info("Starting sync summarization for recording: {}", recordingId);
-        
+
         // Получаем запись
         RecordingEntity recording = recordingRepository.findById(recordingId)
             .orElseThrow(() -> new IllegalArgumentException("Recording not found: " + recordingId));
-        
+
         // Проверяем файл
         Path audioPath = Paths.get(storagePath, recording.getFilename());
         if (!java.nio.file.Files.exists(audioPath)) {
             throw new IllegalStateException("Audio file not found: " + audioPath);
         }
-        
+
         // Обновляем статус записи
         recording.setStatus(RecordingEntity.RecordingStatus.SUMMARIZING);
-        recordingRepository.save(recording);
-        
+                    recordingRepository.save(recording);
+                    
         // Создаём или получаем сущность суммаризации
         SummaryEntity summary = summaryRepository.findByRecordingId(recordingId)
             .orElseGet(() -> {
@@ -93,32 +100,31 @@ public class SummaryServiceImpl implements SummaryService {
                     .build();
                 return summaryRepository.save(newSummary);
             });
-        
+
         // Обновляем статус суммаризации
         summary.setStatus(SummaryEntity.SummaryStatus.PROCESSING);
         summary.setStartedAt(LocalDateTime.now());
         summary.setRetryCount(summary.getRetryCount() + 1);
         summaryRepository.save(summary);
-        
+
         // Вызываем внешний сервис суммаризации
         var clientResult = summaryClient.summarize(recordingId, audioPath.toString(), language).block();
-        
+
         if (clientResult == null || clientResult.status() == SummaryClient.SummarizationStatus.FAILED) {
             // Обработка ошибки
-            String errorMsg = clientResult != null 
-                ? clientResult.errorMessage() 
+            String errorMsg = clientResult != null
+                ? clientResult.errorMessage()
                 : "Summary service returned null";
-            
+
             summary.setStatus(SummaryEntity.SummaryStatus.FAILED);
             summary.setErrorMessage(errorMsg);
             summary.setCompletedAt(LocalDateTime.now());
             summaryRepository.save(summary);
-            
+
             recording.setStatus(RecordingEntity.RecordingStatus.SUMMARY_FAILED);
             recordingRepository.save(recording);
-            
             log.error("Summarization failed for recording {}: {}", recordingId, errorMsg);
-            
+
             return new SummarizationResult(
                 false,
                 summary.getId(),
@@ -128,15 +134,15 @@ public class SummaryServiceImpl implements SummaryService {
                 null,
                 null,
                 errorMsg
-            );
-        }
-        
+        );
+    }
+    
         // Сохраняем результат
         summary.setStatus(SummaryEntity.SummaryStatus.COMPLETED);
         summary.setSummaryText(clientResult.summaryText());
         summary.setBriefSummary(clientResult.briefSummary());
-        summary.setKeywords(clientResult.keywords() != null 
-            ? String.join(",", clientResult.keywords()) 
+        summary.setKeywords(clientResult.keywords() != null
+            ? String.join(",", clientResult.keywords())
             : null);
         summary.setConfidenceScore(clientResult.confidenceScore() != null
             ? BigDecimal.valueOf(clientResult.confidenceScore())
@@ -144,14 +150,14 @@ public class SummaryServiceImpl implements SummaryService {
         summary.setDetectedLanguage(clientResult.detectedLanguage());
         summary.setCompletedAt(LocalDateTime.now());
         summaryRepository.save(summary);
-        
+
         // Обновляем статус записи
         recording.setStatus(RecordingEntity.RecordingStatus.READY);
         recordingRepository.save(recording);
-        
-        log.info("Summarization completed for recording {}: confidence={}", 
+
+        log.info("Summarization completed for recording {}: confidence={}",
             recordingId, clientResult.confidenceScore());
-        
+
         return new SummarizationResult(
             true,
             summary.getId(),
@@ -163,15 +169,15 @@ public class SummaryServiceImpl implements SummaryService {
             null
         );
     }
-    
+
     @Override
     @Transactional
     public int retryFailedSummarizations(int maxRetries) {
         log.info("Retrying failed summarizations (max retries: {})", maxRetries);
-        
+
         List<SummaryEntity> failedSummaries = summaryRepository.findFailedForRetry(maxRetries);
         int startedCount = 0;
-        
+
         for (SummaryEntity summary : failedSummaries) {
             try {
                 summarizeAsync(summary.getRecording().getId(), summary.getDetectedLanguage());
@@ -181,16 +187,16 @@ public class SummaryServiceImpl implements SummaryService {
                 log.error("Failed to start retry for summarization {}: {}", summary.getId(), e.getMessage());
             }
         }
-        
+
         log.info("Started {} summarization retries", startedCount);
         return startedCount;
     }
-    
+
     @Override
     @Transactional
     public boolean cancelSummarization(String recordingId) {
         log.debug("Cancelling summarization for recording: {}", recordingId);
-        
+
         Optional<SummaryEntity> summaryOpt = summaryRepository.findByRecordingId(recordingId);
         if (summaryOpt.isEmpty()) {
             return false;
@@ -202,7 +208,7 @@ public class SummaryServiceImpl implements SummaryService {
             log.debug("Cannot cancel summarization in status: {}", summary.getStatus());
             return false;
         }
-        
+
         // Пытаемся отменить на стороне сервиса
         summaryClient.cancelSummarization(summary.getId()).subscribe(
             cancelled -> {
@@ -211,28 +217,28 @@ public class SummaryServiceImpl implements SummaryService {
                     summary.setErrorMessage("Cancelled by user");
                     summary.setCompletedAt(LocalDateTime.now());
                     summaryRepository.save(summary);
-                    
+
                     RecordingEntity recording = summary.getRecording();
                     recording.setStatus(RecordingEntity.RecordingStatus.READY);
                     recordingRepository.save(recording);
-                    
+
                     log.info("Summarization cancelled for recording: {}", recordingId);
                 }
             },
             error -> log.error("Error cancelling summarization: {}", error.getMessage())
         );
-        
+
         return true;
     }
-    
+
     @Override
     public SummarizationStatus getStatus(String recordingId) {
         Optional<SummaryEntity> summaryOpt = summaryRepository.findByRecordingId(recordingId);
-        
+
         if (summaryOpt.isEmpty()) {
             return SummarizationStatus.NOT_STARTED;
-        }
-        
+}
+
         SummaryEntity summary = summaryOpt.get();
         return switch (summary.getStatus()) {
             case PENDING -> SummarizationStatus.PENDING;
