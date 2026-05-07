@@ -1,4 +1,4 @@
->>>>package com.example.recorder.entity;
+package com.example.recorder.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -30,7 +30,7 @@ public class RecordingEntity {
     /**
      * ID пользователя, которому принадлежит запись.
      */
-    @Column(name = "user_id", length = 36, nullable = unchanged)
+    @Column(name = "user_id", length = 36, nullable = false)
     private String userId;
 
     /**
