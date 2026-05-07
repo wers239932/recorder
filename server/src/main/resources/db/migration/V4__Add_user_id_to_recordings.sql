@@ -1,6 +1,8 @@
 -- Добавляем поле user_id в таблицу recordings
 ALTER TABLE recordings 
-ADD COLUMN user_id VARCHAR(36),
+ADD COLUMN user_id VARCHAR(36);
+
+ALTER TABLE recordings 
 ADD COLUMN user_recording_name VARCHAR(255);
 
 -- Создаём индекс для user_id для ускорения запросов
