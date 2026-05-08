@@ -5,6 +5,7 @@ import com.example.recorder.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,13 +22,14 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
     
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
     
     @Value("${recorder.user.session-ttl-hours:24}")
     private int sessionTtlHours;
     
     @Override
     @Transactional
-    public UserEntity registerUser(Long telegramId, String username, String login, String passwordHash,
+    public UserEntity registerUser(Long telegramId, String username, String login, String password,
                                   String firstName, String lastName) {
         if (userRepository.existsByLogin(login)) {
             throw new IllegalArgumentException("Пользователь с таким логином уже существует");
@@ -42,6 +44,9 @@ public class UserServiceImpl implements UserService {
         if (username != null && userRepository.findByUsername(username).isPresent()) {
             throw new IllegalArgumentException("Пользователь с таким username уже существует");
         }
+
+        // Хешируем пароль перед сохранением
+        String passwordHash = passwordEncoder.encode(password);
 
         UserEntity user = UserEntity.builder()
                 .telegramId(telegramId)
@@ -61,9 +66,9 @@ public class UserServiceImpl implements UserService {
     
     @Override
     @Transactional
-    public Optional<String> authenticate(String login, String passwordHash) {
+    public Optional<String> authenticate(String login, String password) {
         return userRepository.findByLogin(login)
-                .filter(user -> user.getIsActive() && user.getPasswordHash().equals(passwordHash))
+                .filter(user -> user.getIsActive() && passwordEncoder.matches(password, user.getPasswordHash()))
                 .map(user -> {
                     // Создаем уникальный токен
                     String token = UUID.randomUUID().toString().replace("-", "");

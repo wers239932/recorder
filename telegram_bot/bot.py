@@ -3,7 +3,6 @@ import asyncio
 import logging
 import os
 import re
-import hashlib
 from datetime import datetime
 from typing import Dict, Optional, List
 
@@ -53,10 +52,6 @@ class TelegramBot:
     def __init__(self):
         self.server_url = SERVER_URL
         self.api_base = API_BASE
-
-    def hash_password(self, password: str) -> str:
-        """Хеширование пароля SHA-256"""
-        return hashlib.sha256(password.encode()).hexdigest()
 
     def is_authorized(self, user_id: int) -> bool:
         """Проверка авторизации пользователя"""
@@ -228,7 +223,7 @@ class TelegramBot:
                 "telegramId": user.id,
                 "username": user.username or "",
                 "login": login,
-                "passwordHash": self.hash_password(password),
+                "password": password,
                 "firstName": user.first_name,
                 "lastName": user.last_name
             }
@@ -300,7 +295,7 @@ class TelegramBot:
         try:
             data = {
                 "login": username,
-                "passwordHash": self.hash_password(password)
+                "password": password
             }
 
             result = self.api_request("POST", "/auth/login", data=data)

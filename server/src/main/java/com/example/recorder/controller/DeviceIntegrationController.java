@@ -1,8 +1,8 @@
 package com.example.recorder.controller;
 
-import com.example.recorder.auth.DeviceAuthService;
 import com.example.recorder.dto.ApiResponse;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.example.recorder.entity.UserEntity;
+import com.example.recorder.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @RestController
@@ -24,38 +25,53 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DeviceIntegrationController {
 
-    private final DeviceAuthService deviceAuthService;
+    private final UserService userService;
 
     @PostMapping("/device/auth/login")
     public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody LoginRequest request) {
-        DeviceAuthService.AuthenticationResult auth =
-            deviceAuthService.authenticate(request.login(), request.passwordHash());
-        if (!auth.success()) {
+        Optional<String> token = userService.authenticate(request.login(), request.password());
+        
+        if (token.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid device credentials");
         }
 
-        log.info("Device authenticated: {}", auth.login());
+        UserEntity user = userService.findByLogin(request.login())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+
+        log.info("Device authenticated: {}", user.getLogin());
         return ResponseEntity.ok(ApiResponse.success(Map.of(
-            "token", auth.token(),
-            "expires_in", auth.expiresIn()
+            "token", token.get(),
+            "expires_in", 24 * 3600 // 24 hours in seconds
         )));
     }
 
     @GetMapping("/device/command")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getCommand(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-        String login = deviceAuthService.validateAuthorizationHeader(authorizationHeader)
+        String token = extractToken(authorizationHeader);
+        UserEntity user = userService.validateToken(token)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid bearer token"));
 
-        DeviceAuthService.RemoteCommand command = deviceAuthService.currentCommandFor(login);
+        // Возвращаем пустую команду (устройство может начать запись по своему усмотрению)
         return ResponseEntity.ok(ApiResponse.success(Map.of(
-            "recording", command.recording(),
-            "sequence", command.sequence()
+            "recording", false,
+            "sequence", 0
         )));
+    }
+
+    private String extractToken(String authorizationHeader) {
+        if (authorizationHeader == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing Authorization header");
+        }
+        String prefix = "Bearer ";
+        if (!authorizationHeader.regionMatches(true, 0, prefix, 0, prefix.length())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid Authorization header format");
+        }
+        return authorizationHeader.substring(prefix.length()).trim();
     }
 
     public record LoginRequest(
             String login,
-            @JsonProperty("password_hash") String passwordHash) {
+            String password) {
     }
 }
