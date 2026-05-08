@@ -43,7 +43,7 @@ recorder:
   flyway:
     auto-repair-on-startup: true
   storage:
-    path: ./recordings
+    path: /Users/ki.a.kuznetsov/IdeaProjects/recorder/server/recordings
     max-file-size: 104857600  # 100MB
 
 # Интеграция с сервисом суммаризации

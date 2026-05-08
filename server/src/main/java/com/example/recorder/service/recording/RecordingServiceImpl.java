@@ -75,9 +75,28 @@ public class RecordingServiceImpl implements RecordingService {
             MultipartFile file,
             UploadRecordingRequest request,
             String clientIp) throws IOException {
+        return uploadRecording(file, request, clientIp, null);
+    }
 
-        log.info("Uploading recording: filename={}, size={}",
-                request.getFilename(), file.getSize());
+    /**
+     * Uploads a new audio recording for a specific user.
+     *
+     * @param file The uploaded file
+     * @param request The upload request containing metadata
+     * @param clientIp The client's IP address
+     * @param userId The ID of the user who owns the recording
+     * @return RecordingResponse containing the uploaded recording details
+     * @throws IOException If file storage fails
+     */
+    @Transactional
+    public RecordingResponse uploadRecording(
+            MultipartFile file,
+            UploadRecordingRequest request,
+            String clientIp,
+            String userId) throws IOException {
+
+        log.info("Uploading recording: filename={}, size={}, userId={}",
+                request.getFilename(), file.getSize(), userId);
 
         // Валидация
         validateFile(file);
@@ -95,6 +114,7 @@ public class RecordingServiceImpl implements RecordingService {
         // Создание сущности записи
         RecordingEntity recording = RecordingEntity.builder()
                 .id(uniqueId)
+                .userId(userId)
                 .filename(filename)
                 .originalFilename(request.getFilename())
                 .fileSize(file.getSize())
@@ -105,7 +125,7 @@ public class RecordingServiceImpl implements RecordingService {
                 .build();
         recordingRepository.save(recording);
 
-        log.info("Recording uploaded successfully: id={}, path={}", recording.getId(), filename);
+        log.info("Recording uploaded successfully: id={}, path={}, userId={}", recording.getId(), filename, userId);
 
         // Автоматический запуск суммаризации (если включено в конфигурации)
         if (Boolean.TRUE.equals(summaryProperties.autoSummarize())) {
@@ -323,17 +343,8 @@ public class RecordingServiceImpl implements RecordingService {
             UploadRecordingRequest request,
             String clientIp,
             String userId) throws IOException {
-        // Базовая загрузка
-        RecordingResponse response = uploadRecording(file, request, clientIp);
-
-        // Привязываем к пользователю
-        RecordingEntity recording = recordingRepository.findById(response.getId())
-                .orElseThrow(() -> new IllegalStateException("Recording not found after upload"));
-
-        recording.setUserId(userId);
-        recordingRepository.save(recording);
-
-        return response;
+        // Загрузка с привязкой к пользователю
+        return uploadRecording(file, request, clientIp, userId);
     }
 
     @Override

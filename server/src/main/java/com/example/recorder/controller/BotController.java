@@ -4,6 +4,7 @@ import com.example.recorder.dto.ApiResponse;
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.RecordingsListResponse;
 import com.example.recorder.dto.TranscriptionResponse;
+import com.example.recorder.dto.UploadRecordingRequest;
 import com.example.recorder.entity.UserEntity;
 import com.example.recorder.entity.TranscriptionEntity;
 import com.example.recorder.service.recording.RecordingService;
@@ -18,9 +19,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
@@ -31,11 +34,12 @@ import java.util.stream.Collectors;
 
 /**
  * REST контроллер для Telegram бота.
- * 
+ *
  * API Endpoints:
  * - POST /api/v1/auth/register - регистрация нового пользователя
  * - POST /api/v1/auth/login - вход в аккаунт
  * - POST /api/v1/auth/logout - выход из аккаунта
+ * - POST /api/v1/bot/recordings/upload - загрузка записи через бота (multipart)
  * - GET  /api/v1/bot/recordings - список записей пользователя
  * - GET  /api/v1/bot/recordings/{id} - метаданные записи пользователя
  * - GET  /api/v1/bot/recordings/{id}/download - скачивание файла
@@ -127,19 +131,73 @@ public class BotController {
     }
     
     /**
+     * Загрузка WAV-файла через Telegram бота (multipart/form-data).
+     * Автоматически привязывает запись к авторизованному пользователю.
+     */
+    @PostMapping(value = "/bot/recordings/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<RecordingResponse>> uploadRecording(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "deviceInfo", required = false, defaultValue = "Telegram-Bot")
+            String deviceInfo,
+            @RequestHeader("Authorization") String authorizationHeader,
+            HttpServletRequest request) {
+
+        UserEntity user = authenticateUser(authorizationHeader);
+
+        String clientIp = request.getRemoteAddr();
+
+        UploadRecordingRequest uploadRequest = UploadRecordingRequest.builder()
+                .deviceInfo(deviceInfo)
+                .deviceIp(clientIp)
+                .filename(file.getOriginalFilename())
+                .fileSize(file.getSize())
+                .contentType(file.getContentType())
+                .build();
+
+        try {
+            RecordingResponse response = recordingService.uploadRecordingForUser(
+                    file, uploadRequest, clientIp, user.getId());
+
+            log.info("Recording uploaded via bot: userId={}, id={}, size={}", 
+                    user.getId(), response.getId(), response.getFileSize());
+
+            // Добавляем информацию о суммаризации в ответ
+            String summaryStatus = recordingService.getSummarizationStatus(response.getId());
+            Map<String, String> summarizationInfo = new HashMap<>();
+            summarizationInfo.put("status", summaryStatus);
+            summarizationInfo.put("autoSummarize", "true");
+
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(ApiResponse.success(
+                            "Recording uploaded successfully. Summarization started.",
+                            response,
+                            summarizationInfo
+                    ));
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad request: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Upload failed", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Upload failed", e);
+        }
+    }
+
+    /**
      * Получение списка записей пользователя.
      */
     @GetMapping("/bot/recordings")
     public ResponseEntity<ApiResponse<List<RecordingResponse>>> getUserRecordings(
             @RequestHeader("Authorization") String authorizationHeader) {
-        
+
         UserEntity user = authenticateUser(authorizationHeader);
-        
+
         List<RecordingResponse> recordings = recordingService.getAllUserRecordings(user.getId());
-        
+
         return ResponseEntity.ok(ApiResponse.success(recordings));
     }
-    
+
     /**
      * Получение метаданных записи пользователя.
      */

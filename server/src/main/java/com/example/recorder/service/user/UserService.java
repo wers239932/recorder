@@ -4,7 +4,6 @@ import com.example.recorder.entity.UserEntity;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Сервис для работы с пользователями.
@@ -56,9 +55,4 @@ public interface UserService {
      * Обновление времени последнего входа.
      */
     void updateLastLogin(Long telegramId);
-    
-    /**
-     * Создать новый токен сессии для пользователя.
-     */
-    String createSessionToken(Long telegramId);
 }

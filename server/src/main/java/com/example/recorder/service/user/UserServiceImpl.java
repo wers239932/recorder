@@ -55,13 +55,22 @@ public class UserServiceImpl implements UserService {
     }
     
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Optional<String> authenticate(String login, String passwordHash) {
         return userRepository.findByLogin(login)
                 .filter(user -> user.getIsActive() && user.getPasswordHash().equals(passwordHash))
                 .map(user -> {
-                    String token = createSessionToken(user.getTelegramId());
+                    // Создаем уникальный токен
+                    String token = UUID.randomUUID().toString().replace("-", "");
+
+                    // Устанавливаем токен и время истечения сессии
+                    user.setSessionToken(token);
+                    user.setSessionExpiresAt(LocalDateTime.now().plusHours(sessionTtlHours));
+                    userRepository.save(user);
+
                     updateLastLogin(user.getTelegramId());
+                    log.info("Пользователь {} успешно вошёл в систему", user.getLogin());
+
                     return token;
                 });
     }
@@ -121,25 +130,5 @@ public class UserServiceImpl implements UserService {
                     user.setLastLoginAt(LocalDateTime.now());
                     userRepository.save(user);
                 });
-    }
-    
-    @Override
-    @Transactional
-    public String createSessionToken(Long telegramId) {
-        return userRepository.findByTelegramId(telegramId)
-                .map(user -> {
-                    // Создаем уникальный токен
-                    String token = UUID.randomUUID().toString().replace("-", "");
-                    
-                    // Устанавливаем токен и время истечения
-                    user.setSessionToken(token);
-                    user.setSessionExpiresAt(LocalDateTime.now().plusHours(sessionTtlHours));
-                    
-                    userRepository.save(user);
-                    log.debug("Создан токен сессии для пользователя {}", user.getLogin());
-                    
-                    return token;
-                })
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
     }
 }

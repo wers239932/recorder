@@ -19,7 +19,7 @@ public interface RecordingService {
     
     /**
      * Загрузка аудио записи.
-     * 
+     *
      * @param file WAV-файл
      * @param request Данные запроса
      * @param clientIp IP адрес клиента
@@ -28,11 +28,16 @@ public interface RecordingService {
      * @throws IllegalArgumentException если файл некорректен
      */
     RecordingResponse uploadRecording(MultipartFile file, UploadRecordingRequest request, String clientIp) throws IOException;
-    
+
     /**
      * Загрузка аудио записи для конкретного пользователя.
      */
     RecordingResponse uploadRecordingForUser(MultipartFile file, UploadRecordingRequest request, String clientIp, String userId) throws IOException;
+
+    /**
+     * Загрузка аудио записи с указанием пользователя.
+     */
+    RecordingResponse uploadRecording(MultipartFile file, UploadRecordingRequest request, String clientIp, String userId) throws IOException;
     /**
      * Получение записи по ID.
      *

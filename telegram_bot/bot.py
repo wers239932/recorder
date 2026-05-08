@@ -589,9 +589,40 @@ class TelegramBot:
             user_id = update.effective_user.id
             token = self.get_user_token(user_id)
 
+            # Проверяем существующую суммаризацию
+            recording_result = self.api_request("GET", f"/bot/recordings/{recording_id}", token=token)
+            recording = recording_result["data"]
+
+            summary_info = recording.get("summary", {})
+            status = summary_info.get("status", "PROCESSING")
+
+            if status == "COMPLETED" and summary_info.get("briefSummary"):
+                summary_text = summary_info.get("briefSummary", "")
+                await query.edit_message_text(
+                    f"📋 Краткое содержание записи:\n\n"
+                    f"📄 {summary_text}\n\n"
+                    "Используйте /recordings для возврата к списку."
+                )
+                return
+            elif status == "FAILED":
+                await query.edit_message_text(
+                    "❌ Суммаризация не удалась.\n\n"
+                    "Попробуйте запустить суммаризацию позже."
+                )
+                return
+            elif status == "PROCESSING":
+                await query.edit_message_text(
+                    "🔄 Суммаризация уже выполняется...\n\n"
+                    "Это может занять несколько минут.\n"
+                    "Попробуйте запросить суммаризацию позже через меню записи."
+                )
+                return
+
+            # Запускаем суммаризацию
             result = self.api_request("POST", f"/bot/recordings/{recording_id}/summarize", token=token)
             await asyncio.sleep(2)
 
+            # Получаем обновлённый статус
             recording_result = self.api_request("GET", f"/bot/recordings/{recording_id}", token=token)
             recording = recording_result["data"]
 
@@ -607,12 +638,19 @@ class TelegramBot:
                 )
             else:
                 await query.edit_message_text(
-                    "🔄 Суммаризация в процессе...\n\n"
+                    "🔄 Суммаризация запущена и выполняется...\n\n"
                     "Это может занять несколько минут.\n"
                     "Попробуйте запросить суммаризацию позже через меню записи."
                 )
 
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Summarization HTTP error: {e}")
+            await query.edit_message_text(
+                f"❌ Ошибка суммаризации: {e.response.status_code}\n\n"
+                "Попробуйте позже."
+            )
         except Exception as e:
+            logger.error(f"Summarization error: {e}")
             await query.edit_message_text(f"❌ Ошибка суммаризации: {e}")
 
     async def transcribe_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -625,6 +663,7 @@ class TelegramBot:
             user_id = update.effective_user.id
             token = self.get_user_token(user_id)
 
+            # Проверяем существующую расшифровку
             try:
                 transcription_result = self.api_request("GET", f"/bot/recordings/{recording_id}/transcription", token=token)
                 transcription = transcription_result["data"]
@@ -643,12 +682,26 @@ class TelegramBot:
                         "Попробуйте запустить расшифровку позже."
                     )
                     return
-            except:
-                pass
+                elif transcription["status"] == "PROCESSING":
+                    await query.edit_message_text(
+                        "🔄 Расшифровка уже выполняется...\n\n"
+                        "Это может занять несколько минут.\n"
+                        "Попробуйте запросить расшифровку позже через меню записи."
+                    )
+                    return
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    # Расшифровка не найдена, нужно запустить
+                    pass
+                else:
+                    logger.error(f"Error checking transcription status: {e}")
+                    raise
 
+            # Запускаем расшифровку
             result = self.api_request("POST", f"/bot/recordings/{recording_id}/transcribe", token=token)
             await asyncio.sleep(3)
 
+            # Получаем результат
             transcription_result = self.api_request("GET", f"/bot/recordings/{recording_id}/transcription", token=token)
             transcription = transcription_result["data"]
 
@@ -661,12 +714,13 @@ class TelegramBot:
                 )
             else:
                 await query.edit_message_text(
-                    "🔄 Расшифровка в процессе...\n\n"
+                    "🔄 Расшифровка запущена и выполняется...\n\n"
                     "Это может занять несколько минут.\n"
                     "Попробуйте запросить расшифровку позже через меню записи."
                 )
 
         except Exception as e:
+            logger.error(f"Transcription error: {e}")
             await query.edit_message_text(f"❌ Ошибка расшифровки: {e}")
 
     async def back_to_recordings_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
