@@ -1,7 +1,7 @@
 -- Создание таблицы пользователей
 CREATE TABLE users (
     id VARCHAR(36) NOT NULL PRIMARY KEY,
-    telegram_id BIGINT NOT NULL UNIQUE,
+    telegram_id BIGINT NOT NULL,
     username VARCHAR(255) UNIQUE,
     login VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,

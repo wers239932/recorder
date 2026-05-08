@@ -12,7 +12,6 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "users", uniqueConstraints = {
-    @UniqueConstraint(columnNames = "telegram_id"),
     @UniqueConstraint(columnNames = "username"),
     @UniqueConstraint(columnNames = "login")
 })
@@ -30,7 +29,7 @@ public class UserEntity {
     /**
      * Telegram ID пользователя.
      */
-    @Column(name = "telegram_id", nullable = false, unique = true)
+    @Column(name = "telegram_id", nullable = false)
     private Long telegramId;
     
     /**
