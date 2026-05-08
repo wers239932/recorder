@@ -389,14 +389,4 @@ public class RecordingController {
     private String getClientIp(String xForwardedFor, String xRealIp) {
         return getClientIp(null, xForwardedFor, xRealIp);
     }
-
-    private String resolveAuthenticatedDevice(String authorizationHeader, String deviceToken) {
-        if (authorizationHeader != null && !authorizationHeader.isBlank()) {
-            return deviceAuthService.validateAuthorizationHeader(authorizationHeader).orElse(null);
-        }
-        if (deviceToken != null && !deviceToken.isBlank()) {
-            return "legacy-device";
-        }
-        return null;
-    }
 }
