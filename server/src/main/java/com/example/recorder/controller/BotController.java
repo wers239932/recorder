@@ -430,7 +430,16 @@ public class BotController {
     public record LoginRequest(
             String login,
             String password
-    ) {}
+    ) {
+        public LoginRequest {
+            if (login == null || login.isBlank()) {
+                throw new IllegalArgumentException("login cannot be null or blank");
+            }
+            if (password == null || password.isBlank()) {
+                throw new IllegalArgumentException("password cannot be null or blank");
+            }
+        }
+    }
     
     public record RenameRequest(
             String newFilename

@@ -235,7 +235,8 @@ bool AuthManager::request_token() {
 
     const std::string password_hash = sha256_hex(config_.password);
     cJSON_AddStringToObject(request_root, "login", config_.login.c_str());
-    cJSON_AddStringToObject(request_root, "password_hash", password_hash.c_str());
+    // Server expects 'password' field to perform its own hashing/validation
+    cJSON_AddStringToObject(request_root, "password", config_.password.c_str());
     char* request_payload = cJSON_PrintUnformatted(request_root);
     cJSON_Delete(request_root);
     if (!request_payload) {
