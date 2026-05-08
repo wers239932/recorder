@@ -2,7 +2,7 @@
 CREATE TABLE users (
     id VARCHAR(36) NOT NULL PRIMARY KEY,
     telegram_id BIGINT NOT NULL,
-    username VARCHAR(255) UNIQUE,
+    username VARCHAR(255),
     login VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(255),

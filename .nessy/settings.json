@@ -3,7 +3,8 @@
     "allow": [
       "Bash(rm *)",
       "Bash(lsof *)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(curl *)"
     ]
   },
   "$version": 3

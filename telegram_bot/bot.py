@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import asyncio
 import logging
 import os
@@ -78,9 +79,9 @@ class TelegramBot:
             return False
         return True
 
-    # API методы
+    # API методы с улучшенной обработкой ошибок
     def api_request(self, method: str, endpoint: str, token: str = None, data: dict = None, params: dict = None) -> dict:
-        """Универсальный метод для API запросов"""
+        """Универсальный метод для API запросов с подробной обработкой ошибок"""
         url = f"{self.api_base}{endpoint}"
         headers = {"Content-Type": "application/json"}
 
@@ -99,12 +100,46 @@ class TelegramBot:
             else:
                 raise ValueError(f"Неподдерживаемый метод HTTP: {method}")
 
+            # Обработка HTTP статусов
+            if response.status_code == 401:
+                # Для login/register endpoint 401 означает неверные данные
+                if endpoint in ["/auth/login", "/auth/register"]:
+                    raise APIError("auth_failed", "Неверный логин или пароль")
+                else:
+                    raise APIError("session_expired", "Сессия истекла. Пожалуйста, войдите снова.")
+            elif response.status_code == 403:
+                raise APIError("access_denied", "Доступ запрещён. Убедитесь, что вы авторизованы.")
+            elif response.status_code == 404:
+                raise APIError("not_found", "Ресурс не найден.")
+            elif response.status_code == 400:
+                # Пытаемся получить сообщение об ошибке из ответа
+                try:
+                    error_data = response.json()
+                    error_message = error_data.get("error", {}).get("message", "Неверный запрос.")
+                except:
+                    error_message = "Неверный запрос."
+                raise APIError("bad_request", error_message)
+            elif response.status_code == 500:
+                raise APIError("server_error", "Внутренняя ошибка сервера. Попробуйте позже.")
+            elif response.status_code == 502:
+                raise APIError("gateway_error", "Сервер временно недоступен. Попробуйте позже.")
+            elif response.status_code == 503:
+                raise APIError("service_unavailable", "Сервис временно недоступен. Попробуйте позже.")
+            elif response.status_code >= 400:
+                raise APIError("http_error", f"Ошибка сервера: {response.status_code}")
+
             response.raise_for_status()
             return response.json()
 
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Connection error: {e}")
+            raise APIError("connection_error", "Не удалось подключиться к серверу. Проверьте, что сервер запущен.")
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Timeout error: {e}")
+            raise APIError("timeout", "Превышено время ожидания ответа от сервера. Попробуйте позже.")
         except requests.exceptions.RequestException as e:
-            logger.error(f"API request failed: {e}")
-            raise Exception(f"Ошибка сервера: {e}")
+            logger.error(f"Request exception: {e}")
+            raise APIError("network_error", f"Ошибка сети: {str(e)}")
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обработчик команды /start"""
@@ -229,8 +264,8 @@ class TelegramBot:
                 "username": user.username or "",
                 "login": login,
                 "passwordHash": self.hash_password(password),
-                "firstName": user.first_name,
-                "lastName": user.last_name
+                "firstName": user.first_name or "",
+                "lastName": user.last_name or ""
             }
 
             result = self.api_request("POST", "/auth/register", data=data)
@@ -244,22 +279,40 @@ class TelegramBot:
 
             return ConversationHandler.END
 
-        except Exception as e:
-            error_message = str(e)
-            # Проверяем, является ли ошибкой существование пользователя с таким Telegram ID
-            if "Telegram ID уже существует" in error_message:
+        except APIError as e:
+            # Обработка известных ошибок API
+            if e.error_type == "bad_request":
+                if "логином" in e.message.lower():
+                    await update.message.reply_text(
+                        "❌ Такой логин уже занят!\n"
+                        "Попробуйте другой логин:"
+                    )
+                    return REGISTER
+                elif "telegram" in e.message.lower():
+                    await update.message.reply_text(
+                        "❌ Этот Telegram-аккаунт уже зарегистрирован!\n\n"
+                        "Используйте /login для входа в существующий аккаунт."
+                    )
+                    return ConversationHandler.END
+                else:
+                    await update.message.reply_text(f"❌ Ошибка регистрации: {e.message}\nПопробуйте другой логин:")
+                    return ConversationHandler.END
+            elif e.error_type == "connection_error":
                 await update.message.reply_text(
-                    "❌ Этот Telegram аккаунт уже зарегистрирован!\n\n"
-                    "Используйте /login для входа в существующий аккаунт\n"
-                    "или /logout для выхода из текущего."
+                    "❌ Сервер временно недоступен.\n"
+                    "Пожалуйста, попробуйте позже."
                 )
-            elif "таким логином уже существует" in error_message:
-                await update.message.reply_text(
-                    "❌ Логин уже занят! Попробуйте другой логин:"
-                )
-                return REGISTER
+                return ConversationHandler.END
             else:
-                await update.message.reply_text(f"❌ Ошибка регистрации: {e}\nПопробуйте другой логин:")
+                await update.message.reply_text(f"❌ Ошибка регистрации: {e.message}")
+                return ConversationHandler.END
+
+        except Exception as e:
+            logger.error(f"Unexpected registration error: {e}")
+            await update.message.reply_text(
+                "❌ Произошла непредвиденная ошибка.\n"
+                "Пожалуйста, попробуйте позже."
+            )
             return ConversationHandler.END
 
     async def login_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -317,20 +370,29 @@ class TelegramBot:
 
             return ConversationHandler.END
 
-        except Exception as e:
-            error_message = str(e)
-            if "400" in error_message or "BAD_REQUEST" in error_message:
+        except APIError as e:
+            if e.error_type == "auth_failed" or e.error_type == "bad_request":
                 await update.message.reply_text(
-                    "❌ Ошибка входа: Неверный логин или пароль!\nПопробуйте еще раз:"
-                )
-            elif "Telegram ID уже существует" in error_message:
-                # Это может произойти если пользователь пытается войти, но аккаунт привязан к другому Telegram ID
-                await update.message.reply_text(
-                    "❌ Этот аккаунт уже привязан к другому Telegram пользователю!\nПопробуйте другой логин:"
+                    "❌ Неверный логин или пароль!\n"
+                    "Попробуйте еще раз:"
                 )
                 return LOGIN
+            elif e.error_type == "connection_error":
+                await update.message.reply_text(
+                    "❌ Сервер временно недоступен.\n"
+                    "Пожалуйста, попробуйте позже."
+                )
+                return ConversationHandler.END
             else:
-                await update.message.reply_text(f"❌ Ошибка входа: {e}\nПопробуйте еще раз:")
+                await update.message.reply_text(f"❌ Ошибка входа: {e.message}")
+                return LOGIN
+
+        except Exception as e:
+            logger.error(f"Unexpected login error: {e}")
+            await update.message.reply_text(
+                "❌ Произошла непредвиденная ошибка.\n"
+                "Пожалуйста, попробуйте позже."
+            )
             return LOGIN
 
     async def logout_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -344,8 +406,10 @@ class TelegramBot:
 
         try:
             self.api_request("POST", "/auth/logout", token=token)
+        except APIError as e:
+            logger.warning(f"Logout API error (ignored): {e.message}")
         except Exception as e:
-            logger.error(f"Logout API error: {e}")
+            logger.error(f"Logout error: {e}")
 
         authorized_users.pop(user_id, None)
 
@@ -391,8 +455,27 @@ class TelegramBot:
                 reply_markup=reply_markup
             )
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                # Очищаем сессию и просим войти снова
+                authorized_users.pop(user_id, None)
+                await update.message.reply_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "connection_error":
+                await update.message.reply_text(
+                    "❌ Сервер временно недоступен.\n"
+                    "Пожалуйста, попробуйте позже."
+                )
+            else:
+                await update.message.reply_text(f"❌ Ошибка: {e.message}")
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка при получении записей: {e}")
+            logger.error(f"Unexpected recordings error: {e}")
+            await update.message.reply_text(
+                "❌ Произошла непредвиденная ошибка.\n"
+                "Пожалуйста, попробуйте позже."
+            )
 
     async def recording_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обработка нажатия на кнопку записи"""
@@ -437,8 +520,31 @@ class TelegramBot:
 
             await query.edit_message_text(text=info_text, reply_markup=reply_markup)
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    "❌ Запись не найдена.\n"
+                    "Возможно, она была удалена."
+                )
+            elif e.error_type == "connection_error":
+                await query.edit_message_text(
+                    "❌ Сервер временно недоступен.\n"
+                    "Пожалуйста, попробуйте позже."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {e.message}")
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка: {e}")
+            logger.error(f"Unexpected recording callback error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка.\n"
+                "Пожалуйста, попробуйте позже."
+            )
 
     async def download_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Скачивание записи"""
@@ -457,8 +563,18 @@ class TelegramBot:
             download_url = f"{self.api_base}/bot/recordings/{recording_id}/download"
             headers = {"Authorization": f"Bearer {token}"}
 
-            response = requests.get(download_url, headers=headers, timeout=30)
-            response.raise_for_status()
+            response = requests.get(download_url, headers=headers, timeout=60)
+            
+            if response.status_code == 401:
+                authorized_users.pop(user_id, None)
+                await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
+                return
+            elif response.status_code == 404:
+                await query.answer("❌ Файл не найден.", show_alert=True)
+                return
+            elif response.status_code >= 400:
+                await query.answer(f"❌ Ошибка скачивания: {response.status_code}", show_alert=True)
+                return
 
             await query.bot.send_document(
                 chat_id=query.message.chat_id,
@@ -467,25 +583,67 @@ class TelegramBot:
                 caption=f"📥 Файл: {filename}"
             )
 
-            await query.answer("✅ Файл отправлен!", show_alert=True)
+            await query.answer("✅ Файл отправлен!", show_alert=False)
 
+        except requests.exceptions.Timeout:
+            await query.answer(
+                "⏱️ Превышено время скачивания.\n"
+                "Файл слишком большой или соединение нестабильно.",
+                show_alert=True
+            )
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
+            else:
+                await query.answer(f"❌ Ошибка: {e.message}", show_alert=True)
         except Exception as e:
-            await query.answer(f"❌ Ошибка скачивания: {e}", show_alert=True)
+            logger.error(f"Download error: {e}")
+            await query.answer("❌ Произошла ошибка при скачивании.", show_alert=True)
 
     async def rename_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Начало переименования записи"""
         query = update.callback_query
         await query.answer()
 
-        recording_id = query.data.split(":")[1]
-        context.user_data["rename_recording_id"] = recording_id
+        try:
+            recording_id = query.data.split(":")[1]
+            user_id = update.effective_user.id
+            token = self.get_user_token(user_id)
 
-        await query.edit_message_text(
-            "📝 Введите новое имя файла (без расширения):\n\n"
-            "Пример: Моя_аудиозапись_01"
-        )
+            # Проверяем, что запись существует
+            self.api_request("GET", f"/bot/recordings/{recording_id}", token=token)
 
-        return RENAME
+            context.user_data["rename_recording_id"] = recording_id
+
+            await query.edit_message_text(
+                "📝 Введите новое имя файла (без расширения):\n\n"
+                "Пример: Моя_аудиозапись_01"
+            )
+
+            return RENAME
+
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    "❌ Запись не найдена.\n"
+                    "Возможно, она была удалена."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {e.message}")
+            return ConversationHandler.END
+        except Exception as e:
+            logger.error(f"Rename callback error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
+            return ConversationHandler.END
 
     async def process_rename(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Обработка нового имени файла"""
@@ -515,9 +673,36 @@ class TelegramBot:
 
             return ConversationHandler.END
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(user_id, None)
+                await update.message.reply_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+                return ConversationHandler.END
+            elif e.error_type == "not_found":
+                await update.message.reply_text(
+                    "❌ Запись не найдена.\n"
+                    "Возможно, она была удалена."
+                )
+                return ConversationHandler.END
+            elif e.error_type == "bad_request":
+                await update.message.reply_text(
+                    f"❌ Ошибка переименования: {e.message}\n"
+                    "Попробуйте другое имя:"
+                )
+                return RENAME
+            else:
+                await update.message.reply_text(f"❌ Ошибка переименования: {e.message}")
+                return ConversationHandler.END
+
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка переименования: {e}\nПопробуйте еще раз:")
-            return RENAME
+            logger.error(f"Rename error: {e}")
+            await update.message.reply_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
+            return ConversationHandler.END
 
     async def delete_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Удаление записи с подтверждением"""
@@ -549,8 +734,25 @@ class TelegramBot:
                 reply_markup=reply_markup
             )
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    "❌ Запись не найдена.\n"
+                    "Возможно, она была удалена."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {e.message}")
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка: {e}")
+            logger.error(f"Delete callback error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
 
     async def confirm_delete_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Подтверждение удаления записи"""
@@ -569,8 +771,25 @@ class TelegramBot:
                 "Используйте /recordings для просмотра обновленного списка."
             )
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    "❌ Запись не найдена.\n"
+                    "Возможно, она уже была удалена."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка удаления: {e.message}")
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка удаления: {e}")
+            logger.error(f"Delete error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
 
     async def cancel_delete_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Отмена удаления записи"""
@@ -643,15 +862,30 @@ class TelegramBot:
                     "Попробуйте запросить суммаризацию позже через меню записи."
                 )
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"Summarization HTTP error: {e}")
-            await query.edit_message_text(
-                f"❌ Ошибка суммаризации: {e.response.status_code}\n\n"
-                "Попробуйте позже."
-            )
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    "❌ Запись не найдена."
+                )
+            elif e.error_type == "service_unavailable":
+                await query.edit_message_text(
+                    "🔄 Сервис суммаризации временно недоступен.\n"
+                    "Попробуйте позже."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка суммаризации: {e.message}")
         except Exception as e:
             logger.error(f"Summarization error: {e}")
-            await query.edit_message_text(f"❌ Ошибка суммаризации: {e}")
+            await query.edit_message_text(
+                "❌ Произошла ошибка при суммаризации.\n"
+                "Попробуйте позже."
+            )
 
     async def transcribe_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Запуск расшифровки записи"""
@@ -689,13 +923,11 @@ class TelegramBot:
                         "Попробуйте запросить расшифровку позже через меню записи."
                     )
                     return
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 404:
-                    # Расшифровка не найдена, нужно запустить
-                    pass
-                else:
-                    logger.error(f"Error checking transcription status: {e}")
+            except APIError as e:
+                if e.error_type != "not_found":
                     raise
+                # Расшифровка не найдена, нужно запустить
+                pass
 
             # Запускаем расшифровку
             result = self.api_request("POST", f"/bot/recordings/{recording_id}/transcribe", token=token)
@@ -719,9 +951,30 @@ class TelegramBot:
                     "Попробуйте запросить расшифровку позже через меню записи."
                 )
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(update.effective_user.id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    "❌ Запись не найдена."
+                )
+            elif e.error_type == "service_unavailable":
+                await query.edit_message_text(
+                    "🔄 Сервис расшифровки временно недоступен.\n"
+                    "Попробуйте позже."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка расшифровки: {e.message}")
         except Exception as e:
             logger.error(f"Transcription error: {e}")
-            await query.edit_message_text(f"❌ Ошибка расшифровки: {e}")
+            await query.edit_message_text(
+                "❌ Произошла ошибка при расшифровке.\n"
+                "Попробуйте позже."
+            )
 
     async def back_to_recordings_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Возврат к списку записей"""
@@ -759,8 +1012,25 @@ class TelegramBot:
                 reply_markup=reply_markup
             )
 
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(user_id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "connection_error":
+                await query.edit_message_text(
+                    "❌ Сервер временно недоступен.\n"
+                    "Пожалуйста, попробуйте позже."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {e.message}")
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка при получении записей: {e}")
+            logger.error(f"Back to recordings error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
 
     async def cancel_conversation(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Отмена текущего диалога"""
@@ -776,10 +1046,29 @@ class TelegramBot:
 
     async def unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обработчик неизвестных команд"""
+        command = update.message.text.split()[0] if update.message.text else "/unknown"
+        
+        # Игнорируем известные команды, которые уже обработаны
+        known_commands = ["/start", "/help", "/logout", "/recordings", "/register", "/login", "/cancel"]
+        if command.lower() in known_commands:
+            return
+        
         await update.message.reply_text(
             "❌ Неизвестная команда!\n\n"
             "Используйте /help для просмотра доступных команд."
         )
+
+
+# ============================================================================
+# КЛАССЫ ИСКЛЮЧЕНИЙ
+# ============================================================================
+
+class APIError(Exception):
+    """Пользовательское исключение для ошибок API"""
+    def __init__(self, error_type: str, message: str):
+        self.error_type = error_type
+        self.message = message
+        super().__init__(message)
 
 
 # ============================================================================
@@ -809,8 +1098,16 @@ def main() -> None:
             REGISTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_register_login)],
             REGISTER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_register_password)],
         },
-        fallbacks=[CommandHandler("cancel", bot.cancel_conversation)],
-        per_message=False,  # Явно указываем для подавления предупреждения
+        fallbacks=[
+            CommandHandler("cancel", bot.cancel_conversation),
+            CommandHandler("login", bot.login_command),
+            CommandHandler("logout", bot.logout_command),
+            CommandHandler("recordings", bot.recordings_command),
+            CommandHandler("start", bot.start_command),
+            CommandHandler("help", bot.help_command),
+        ],
+        per_message=False,
+        allow_reentry=True,
     )
 
     # ConversationHandler для входа
@@ -820,8 +1117,16 @@ def main() -> None:
             LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_login_username)],
             LOGIN_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_login_password)],
         },
-        fallbacks=[CommandHandler("cancel", bot.cancel_conversation)],
+        fallbacks=[
+            CommandHandler("cancel", bot.cancel_conversation),
+            CommandHandler("register", bot.register_command),
+            CommandHandler("logout", bot.logout_command),
+            CommandHandler("recordings", bot.recordings_command),
+            CommandHandler("start", bot.start_command),
+            CommandHandler("help", bot.help_command),
+        ],
         per_message=False,
+        allow_reentry=True,
     )
 
     # ConversationHandler для переименования
@@ -834,7 +1139,7 @@ def main() -> None:
         per_message=False,
     )
 
-    # Регистрация обработчиков
+    # Регистрация обработчиков - ВАЖНО: сначала конкретные, потом общие
     application.add_handler(register_conv_handler)
     application.add_handler(login_conv_handler)
     application.add_handler(rename_conv_handler)
@@ -855,7 +1160,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(bot.transcribe_callback, pattern="^transcribe:"))
     application.add_handler(CallbackQueryHandler(bot.back_to_recordings_callback, pattern="^back_to_recordings$"))
 
-    # Обработчик неизвестных команд
+    # Обработчик неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ
     application.add_handler(MessageHandler(filters.COMMAND, bot.unknown_command))
 
     # Запуск бота

@@ -30,7 +30,10 @@ dependencies {
     
     // Spring Boot Data JPA
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    
+
+    // Spring JDBC для прямой работы с БД
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+
     // База данных (H2 для dev, можно заменить на PostgreSQL)
     runtimeOnly("com.h2database:h2")
     runtimeOnly("org.postgresql:postgresql")

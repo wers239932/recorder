@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,12 +20,14 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
     /**
      * Найти пользователя по Telegram ID.
      */
+    @Query(value = "SELECT * FROM users WHERE telegram_id = ?1 LIMIT 1", nativeQuery = true)
     Optional<UserEntity> findByTelegramId(Long telegramId);
     
     /**
      * Найти пользователя по логину.
      */
-    Optional<UserEntity> findByLogin(String login);
+    @Query(value = "SELECT * FROM users WHERE login = ?1 LIMIT 1", nativeQuery = true)
+    List<UserEntity> findByLogin(String login);
     
     /**
      * Найти пользователя по имени пользователя.
