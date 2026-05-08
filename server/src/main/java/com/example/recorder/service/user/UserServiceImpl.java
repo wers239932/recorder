@@ -33,6 +33,11 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("Пользователь с таким логином уже существует");
         }
         
+        // Проверяем, существует ли пользователь с таким username
+        if (username != null && userRepository.findByUsername(username).isPresent()) {
+            throw new IllegalArgumentException("Пользователь с таким username уже существует");
+        }
+        
         UserEntity user = UserEntity.builder()
                 .telegramId(telegramId)
                 .username(username)
