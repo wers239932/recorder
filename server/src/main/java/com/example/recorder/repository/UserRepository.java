@@ -34,6 +34,7 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
     /**
      * Найти пользователя по токену сессии.
      */
+    @Query("SELECT u FROM UserEntity u WHERE u.sessionToken = :sessionToken")
     Optional<UserEntity> findBySessionToken(String sessionToken);
     
     /**
