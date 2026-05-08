@@ -224,13 +224,16 @@ class TelegramBot:
         user = update.effective_user
 
         try:
+            # Получаем username, если он не установлен - используем None (сервер обработает)
+            telegram_username = user.username if user.username else None
+            
             data = {
                 "telegramId": user.id,
-                "username": user.username,
+                "username": telegram_username,
                 "login": login,
                 "passwordHash": self.hash_password(password),
-                "firstName": user.first_name,
-                "lastName": user.last_name
+                "firstName": user.first_name or "",
+                "lastName": user.last_name or ""
             }
 
             result = self.api_request("POST", "/auth/register", data=data)
@@ -258,6 +261,12 @@ class TelegramBot:
                     "❌ Логин уже занят! Попробуйте другой логин:"
                 )
                 return REGISTER
+            elif "username уже существует" in error_message:
+                await update.message.reply_text(
+                    "❌ Пользователь с таким username уже существует!\n\n"
+                    "Это означает, что ваш Telegram аккаунт уже был зарегистрирован ранее.\n"
+                    "Используйте /login для входа в существующий аккаунт."
+                )
             else:
                 await update.message.reply_text(f"❌ Ошибка регистрации: {e}\nПопробуйте другой логин:")
             return ConversationHandler.END

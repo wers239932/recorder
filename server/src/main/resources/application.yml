@@ -42,6 +42,8 @@ server:
 recorder:
   flyway:
     auto-repair-on-startup: true
+  user:
+    session-ttl-hours: 24
   storage:
     path: ./recordings
     max-file-size: 104857600  # 100MB
