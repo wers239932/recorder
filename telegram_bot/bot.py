@@ -245,8 +245,22 @@ class TelegramBot:
             return ConversationHandler.END
 
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка регистрации: {e}\nПопробуйте другой логин:")
-            return REGISTER
+            error_message = str(e)
+            # Проверяем, является ли ошибкой существование пользователя с таким Telegram ID
+            if "Telegram ID уже существует" in error_message:
+                await update.message.reply_text(
+                    "❌ Этот Telegram аккаунт уже зарегистрирован!\n\n"
+                    "Используйте /login для входа в существующий аккаунт\n"
+                    "или /logout для выхода из текущего."
+                )
+            elif "таким логином уже существует" in error_message:
+                await update.message.reply_text(
+                    "❌ Логин уже занят! Попробуйте другой логин:"
+                )
+                return REGISTER
+            else:
+                await update.message.reply_text(f"❌ Ошибка регистрации: {e}\nПопробуйте другой логин:")
+            return ConversationHandler.END
 
     async def login_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Начало процесса входа"""
@@ -304,7 +318,19 @@ class TelegramBot:
             return ConversationHandler.END
 
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка входа: {e}\nПопробуйте еще раз:")
+            error_message = str(e)
+            if "400" in error_message or "BAD_REQUEST" in error_message:
+                await update.message.reply_text(
+                    "❌ Ошибка входа: Неверный логин или пароль!\nПопробуйте еще раз:"
+                )
+            elif "Telegram ID уже существует" in error_message:
+                # Это может произойти если пользователь пытается войти, но аккаунт привязан к другому Telegram ID
+                await update.message.reply_text(
+                    "❌ Этот аккаунт уже привязан к другому Telegram пользователю!\nПопробуйте другой логин:"
+                )
+                return LOGIN
+            else:
+                await update.message.reply_text(f"❌ Ошибка входа: {e}\nПопробуйте еще раз:")
             return LOGIN
 
     async def logout_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
