@@ -1,3 +1,1 @@
-```
-.gradle/
-```
+Nothing should be ignored since the changes only include a Java source file (.java) which is source code that should be tracked in version control.
