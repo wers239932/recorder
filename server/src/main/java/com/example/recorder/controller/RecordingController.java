@@ -127,7 +127,7 @@ public class RecordingController {
     /**
      * Загрузка WAV-файла с ESP32-C6 устройства (raw body с токеном авторизации).
      * Принимает аудио как raw body с Content-Type: audio/wav.
-     * Токен авторизации передаётся в заголовке X-Device-Token.
+     * Токен авторизации передаётся в заголовке Authorization: Bearer <token> или X-Device-Token.
      * Автоматически запускает суммаризацию (если включено в конфигурации).
      */
     @PostMapping(value = {"/recordings/upload-raw", "/data/upload"},
@@ -137,27 +137,43 @@ public class RecordingController {
             @RequestBody byte[] audioData,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
             @RequestHeader(value = "X-Device-Token", required = false) String deviceToken,
-            @RequestHeader(value = "X-Device-Info", required = false, defaultValue = "ESP32-C6-Recorder") 
+            @RequestHeader(value = "X-Device-Info", required = false, defaultValue = "ESP32-C6-Recorder")
             String deviceInfo,
             @RequestHeader(value = "X-Forwarded-For", required = false) String xForwardedFor,
             @RequestHeader(value = "X-Real-IP", required = false) String xRealIp,
             HttpServletRequest servletRequest) {
-        
+
         String clientIp = getClientIp(servletRequest, xForwardedFor, xRealIp);
-        String authenticatedDevice = resolveAuthenticatedDevice(authorizationHeader, deviceToken);
-        if (authenticatedDevice != null) {
-            log.info("Raw upload authenticated as device={} from IP={}", authenticatedDevice, clientIp);
+        
+        // Аутентификация устройства через Bearer-токен или X-Device-Token
+        String deviceLogin = null;
+        
+        // Пробуем Bearer-токен из Authorization заголовка
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            String token = authorizationHeader.substring(7).trim();
+            if (!token.isEmpty()) {
+                deviceLogin = deviceAuthService.validateToken(token).orElse(null);
+            }
+        }
+        
+        // Если не нашли, пробуем X-Device-Token
+        if (deviceLogin == null && deviceToken != null && !deviceToken.isBlank()) {
+            deviceLogin = deviceAuthService.validateToken(deviceToken).orElse("legacy-device");
+        }
+        
+        if (deviceLogin != null) {
+            log.info("Raw upload authenticated as device={} from IP={}", deviceLogin, clientIp);
         } else {
             log.info("Raw upload accepted in compatibility mode from IP={}", clientIp);
         }
-        
+
         if (audioData == null || audioData.length == 0) {
             throw new IllegalArgumentException("Audio data is empty");
         }
-        
+
         // Создаём временный MultipartFile из raw данных
         TempMultipartFile tempFile = new TempMultipartFile(audioData, "recording.wav", "audio/wav");
-        
+
         UploadRecordingRequest request = UploadRecordingRequest.builder()
             .deviceInfo(deviceInfo)
             .deviceIp(clientIp)
@@ -165,18 +181,19 @@ public class RecordingController {
             .fileSize((long) audioData.length)
             .contentType("audio/wav")
             .build();
-        
+
         try {
-            RecordingResponse response = recordingService.uploadRecording(tempFile, request, clientIp);
-            
-            log.info("Recording uploaded (raw): id={}, size={}", response.getId(), response.getFileSize());
-            
+            // Загрузка с deviceLogin для устройств
+            RecordingResponse response = recordingService.uploadRecording(tempFile, request, clientIp, null, deviceLogin);
+
+            log.info("Recording uploaded (raw): id={}, size={}, deviceLogin={}", response.getId(), response.getFileSize(), deviceLogin);
+
             // Добавляем информацию о суммаризации в ответ
             String summaryStatus = recordingService.getSummarizationStatus(response.getId());
             Map<String, String> summarizationInfo = new HashMap<>();
             summarizationInfo.put("status", summaryStatus);
             summarizationInfo.put("autoSummarize", "true");
-            
+
             // Создаём расширенный ответ с информацией о суммаризации
             RecordingResponse responseWithSummary = RecordingResponse.builder()
                 .id(response.getId())
@@ -190,15 +207,15 @@ public class RecordingController {
                 .createdAt(response.getCreatedAt())
                 .downloadUrl(response.getDownloadUrl())
                 .build();
-            
+
             return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.success(
-                    "Recording uploaded successfully. Summarization started.", 
+                    "Recording uploaded successfully. Summarization started.",
                     responseWithSummary,
                     summarizationInfo
                 ));
-                
+
         } catch (IllegalArgumentException e) {
             log.warn("Bad request: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
@@ -374,8 +391,7 @@ public class RecordingController {
 
     private String resolveAuthenticatedDevice(String authorizationHeader, String deviceToken) {
         if (authorizationHeader != null && !authorizationHeader.isBlank()) {
-            return deviceAuthService.validateAuthorizationHeader(authorizationHeader)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid bearer token"));
+            return deviceAuthService.validateAuthorizationHeader(authorizationHeader).orElse(null);
         }
         if (deviceToken != null && !deviceToken.isBlank()) {
             return "legacy-device";

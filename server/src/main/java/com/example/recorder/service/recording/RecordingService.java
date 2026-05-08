@@ -38,6 +38,11 @@ public interface RecordingService {
      * Загрузка аудио записи с указанием пользователя.
      */
     RecordingResponse uploadRecording(MultipartFile file, UploadRecordingRequest request, String clientIp, String userId) throws IOException;
+
+    /**
+     * Загрузка аудио записи с указанием пользователя или устройства.
+     */
+    RecordingResponse uploadRecording(MultipartFile file, UploadRecordingRequest request, String clientIp, String userId, String deviceLogin) throws IOException;
     /**
      * Получение записи по ID.
      *

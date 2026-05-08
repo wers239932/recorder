@@ -68,6 +68,13 @@ public class RecordingEntity {
      */
     @Column(name = "device_ip", length = 45)
     private String deviceIp;
+
+    /**
+     * Device login from DeviceAuthService (for ESP32-C6 devices).
+     */
+    @Column(name = "device_login", length = 100)
+    private String deviceLogin;
+
     /**
      * Duration of audio in seconds (filled after analysis).
      */

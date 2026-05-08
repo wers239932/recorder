@@ -84,7 +84,7 @@ public class RecordingServiceImpl implements RecordingService {
      * @param file The uploaded file
      * @param request The upload request containing metadata
      * @param clientIp The client's IP address
-     * @param userId The ID of the user who owns the recording
+     * @param userId The ID of the user who owns the recording (can be null for device uploads)
      * @return RecordingResponse containing the uploaded recording details
      * @throws IOException If file storage fails
      */
@@ -94,9 +94,30 @@ public class RecordingServiceImpl implements RecordingService {
             UploadRecordingRequest request,
             String clientIp,
             String userId) throws IOException {
+        return uploadRecording(file, request, clientIp, userId, null);
+    }
 
-        log.info("Uploading recording: filename={}, size={}, userId={}",
-                request.getFilename(), file.getSize(), userId);
+    /**
+     * Uploads a new audio recording with optional user or device association.
+     *
+     * @param file The uploaded file
+     * @param request The upload request containing metadata
+     * @param clientIp The client's IP address
+     * @param userId The ID of the user who owns the recording (can be null for device uploads)
+     * @param deviceLogin The device login from DeviceAuthService (can be null for user uploads)
+     * @return RecordingResponse containing the uploaded recording details
+     * @throws IOException If file storage fails
+     */
+    @Transactional
+    public RecordingResponse uploadRecording(
+            MultipartFile file,
+            UploadRecordingRequest request,
+            String clientIp,
+            String userId,
+            String deviceLogin) throws IOException {
+
+        log.info("Uploading recording: filename={}, size={}, userId={}, deviceLogin={}",
+                request.getFilename(), file.getSize(), userId, deviceLogin);
 
         // Валидация
         validateFile(file);
@@ -115,6 +136,7 @@ public class RecordingServiceImpl implements RecordingService {
         RecordingEntity recording = RecordingEntity.builder()
                 .id(uniqueId)
                 .userId(userId)
+                .deviceLogin(deviceLogin)
                 .filename(filename)
                 .originalFilename(request.getFilename())
                 .fileSize(file.getSize())
@@ -125,7 +147,7 @@ public class RecordingServiceImpl implements RecordingService {
                 .build();
         recordingRepository.save(recording);
 
-        log.info("Recording uploaded successfully: id={}, path={}, userId={}", recording.getId(), filename, userId);
+        log.info("Recording uploaded successfully: id={}, path={}, userId={}, deviceLogin={}", recording.getId(), filename, userId, deviceLogin);
 
         // Автоматический запуск суммаризации (если включено в конфигурации)
         if (Boolean.TRUE.equals(summaryProperties.autoSummarize())) {

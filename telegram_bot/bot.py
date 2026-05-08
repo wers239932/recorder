@@ -226,7 +226,7 @@ class TelegramBot:
         try:
             data = {
                 "telegramId": user.id,
-                "username": user.username,
+                "username": user.username or "",
                 "login": login,
                 "passwordHash": self.hash_password(password),
                 "firstName": user.first_name,

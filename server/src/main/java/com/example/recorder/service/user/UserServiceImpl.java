@@ -32,12 +32,17 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByLogin(login)) {
             throw new IllegalArgumentException("Пользователь с таким логином уже существует");
         }
-        
-        // Проверяем, существует ли пользователь с таким username
+
+        // Нормализуем username: пустая строка -> null
+        if (username != null && username.isBlank()) {
+            username = null;
+        }
+
+        // Проверяем уникальность username только если он не null
         if (username != null && userRepository.findByUsername(username).isPresent()) {
             throw new IllegalArgumentException("Пользователь с таким username уже существует");
         }
-        
+
         UserEntity user = UserEntity.builder()
                 .telegramId(telegramId)
                 .username(username)
@@ -47,10 +52,10 @@ public class UserServiceImpl implements UserService {
                 .lastName(lastName)
                 .isActive(true)
                 .build();
-        
+
         UserEntity savedUser = userRepository.save(user);
         log.info("Зарегистрирован новый пользователь: login={}, telegramId={}", login, telegramId);
-        
+
         return savedUser;
     }
     
