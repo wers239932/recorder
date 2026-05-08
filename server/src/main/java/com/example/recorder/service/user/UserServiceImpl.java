@@ -29,9 +29,6 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserEntity registerUser(Long telegramId, String username, String login, String passwordHash,
                                   String firstName, String lastName) {
-        if (userRepository.existsByTelegramId(telegramId)) {
-            throw new IllegalArgumentException("Пользователь с таким Telegram ID уже существует");
-        }
         if (userRepository.existsByLogin(login)) {
             throw new IllegalArgumentException("Пользователь с таким логином уже существует");
         }
