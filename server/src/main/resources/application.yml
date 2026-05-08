@@ -45,6 +45,8 @@ recorder:
   storage:
     path: /Users/ki.a.kuznetsov/IdeaProjects/recorder/server/recordings
     max-file-size: 104857600  # 100MB
+  user:
+    session-ttl-hours: 24
 
 # Интеграция с сервисом суммаризации
 summary:

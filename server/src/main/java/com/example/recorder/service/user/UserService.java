@@ -13,13 +13,13 @@ public interface UserService {
     /**
      * Регистрация нового пользователя.
      */
-    UserEntity registerUser(Long telegramId, String username, String login, String passwordHash, 
+    UserEntity registerUser(Long telegramId, String username, String login, String password, 
                            String firstName, String lastName);
     
     /**
      * Аутентификация пользователя по логину и паролю.
      */
-    Optional<String> authenticate(String login, String passwordHash);
+    Optional<String> authenticate(String login, String password);
     
     /**
      * Валидация токена сессии.

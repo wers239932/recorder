@@ -1,12 +1,13 @@
 package com.example.recorder.controller;
 
-import com.example.recorder.auth.DeviceAuthService;
 import com.example.recorder.dto.ApiResponse;
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.RecordingsListResponse;
 import com.example.recorder.dto.UploadRecordingRequest;
+import com.example.recorder.entity.UserEntity;
 import com.example.recorder.service.recording.RecordingService;
 import com.example.recorder.service.summary.SummaryService;
+import com.example.recorder.service.user.UserService;
 import com.example.recorder.util.TempMultipartFile;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -58,7 +59,7 @@ public class RecordingController {
     
     private final RecordingService recordingService;
     private final SummaryService summaryService;
-    private final DeviceAuthService deviceAuthService;
+    private final UserService userService;
     
     /**
      * Загрузка WAV-файла с ESP32-C6 устройства (multipart/form-data).
@@ -152,13 +153,13 @@ public class RecordingController {
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7).trim();
             if (!token.isEmpty()) {
-                deviceLogin = deviceAuthService.validateToken(token).orElse(null);
+                deviceLogin = userService.validateToken(token).map(UserEntity::getLogin).orElse(null);
             }
         }
         
         // Если не нашли, пробуем X-Device-Token
         if (deviceLogin == null && deviceToken != null && !deviceToken.isBlank()) {
-            deviceLogin = deviceAuthService.validateToken(deviceToken).orElse("legacy-device");
+            deviceLogin = userService.validateToken(deviceToken).map(UserEntity::getLogin).orElse("legacy-device");
         }
         
         if (deviceLogin != null) {

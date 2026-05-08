@@ -60,6 +60,9 @@ public class BotController {
     private final RecordingService recordingService;
     private final TranscriptionService transcriptionService;
     
+    @Value("${recorder.user.session-ttl-hours:24}")
+    private int sessionTtlHours;
+    
     /**
      * Регистрация нового пользователя.
      */
@@ -72,7 +75,7 @@ public class BotController {
                     request.telegramId(),
                     request.username(),
                     request.login(),
-                    request.passwordHash(),
+                    request.password(),
                     request.firstName(),
                     request.lastName()
             );
@@ -99,11 +102,12 @@ public class BotController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> loginUser(
             @Valid @RequestBody LoginRequest request) {
         
-        Optional<String> token = userService.authenticate(request.login(), request.passwordHash());
+        Optional<String> token = userService.authenticate(request.login(), request.password());
         
         return token.map(t -> {
             Map<String, Object> data = new HashMap<>();
             data.put("token", t);
+            data.put("expires_in", sessionTtlHours * 3600); // конвертируем часы в секунды
             data.put("message", "Авторизация успешна");
             
             return ResponseEntity.ok(ApiResponse.success(data));
@@ -417,14 +421,14 @@ public class BotController {
             Long telegramId,
             String username,
             String login,
-            String passwordHash,
+            String password,
             String firstName,
             String lastName
     ) {}
     
     public record LoginRequest(
             String login,
-            String passwordHash
+            String password
     ) {}
     
     public record RenameRequest(
