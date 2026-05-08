@@ -166,7 +166,9 @@ public class RecordingServiceImpl implements RecordingService {
 
     @Override
     public Optional<Path> getRecordingFilePath(String id, String userId) {
-        return Optional.empty();
+        return recordingRepository.findById(id)
+                .filter(recording -> userId.equals(recording.getUserId()))
+                .map(recording -> Paths.get(storagePath, recording.getFilename()));
     }
 
     @Override
@@ -180,8 +182,14 @@ public class RecordingServiceImpl implements RecordingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public long[] getUserStorageStats(String userId) {
-        return new long[0];
+        List<RecordingEntity> recordings = recordingRepository.findByUserId(userId);
+        long count = recordings.size();
+        long totalSize = recordings.stream()
+                .mapToLong(RecordingEntity::getFileSize)
+                .sum();
+        return new long[]{count, totalSize};
     }
 
     @Override
@@ -210,7 +218,26 @@ public class RecordingServiceImpl implements RecordingService {
 
     @Override
     public void startSummarization(String recordingId, String language, String userId) {
+        log.info("Starting summarization for recording: {} by user: {}", recordingId, userId);
+        
+        RecordingEntity recording = recordingRepository.findById(recordingId)
+                .filter(r -> userId.equals(r.getUserId()))
+                .orElseThrow(() -> new IllegalArgumentException("Recording not found or access denied: " + recordingId));
 
+        if (summaryRepository.existsByRecordingId(recordingId)) {
+            log.warn("Summarization already exists for recording: {}", recordingId);
+            return;
+        }
+
+        SummaryEntity summary = SummaryEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .recording(recording)
+                .status(SummaryEntity.SummaryStatus.PENDING)
+                .retryCount(0)
+                .build();
+        summaryRepository.save(summary);
+
+        summaryService.summarize(recording.getId(), language);
     }
 
     @Override
