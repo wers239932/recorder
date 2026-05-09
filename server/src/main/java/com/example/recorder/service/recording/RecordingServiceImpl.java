@@ -453,17 +453,21 @@ public class RecordingServiceImpl implements RecordingService {
     public List<RecordingResponse> getAllUserRecordings(String userId) {
         // Получаем записи пользователя
         List<RecordingEntity> userRecordings = recordingRepository.findByUserId(userId);
-        
+
         // Получаем записи с привязанных устройств пользователя
         List<String> deviceLogins = deviceRepository.findByUserId(userId)
                 .stream()
                 .map(d -> d.getLogin())
                 .toList();
-        
-        List<RecordingEntity> deviceRecordings = deviceLogins.isEmpty() 
-            ? List.of() 
-            : recordingRepository.findByDeviceLoginIn(deviceLogins);
-        
+
+        // Получаем записи с устройств, исключая те, что уже есть у пользователя
+        List<RecordingEntity> deviceRecordings = deviceLogins.isEmpty()
+            ? List.of()
+            : recordingRepository.findByDeviceLoginIn(deviceLogins)
+                .stream()
+                .filter(r -> !userId.equals(r.getUserId()))  // Исключаем записи пользователя
+                .toList();
+
         // Объединяем и сортируем по дате создания (новые сверху)
         return Stream.concat(userRecordings.stream(), deviceRecordings.stream())
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))

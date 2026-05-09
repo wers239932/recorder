@@ -682,23 +682,35 @@ class TelegramBot:
             user_id = update.effective_user.id
             token = self.get_user_token(user_id)
 
+            logger.info(f"Download request: recording_id={recording_id}, user_id={user_id}")
+
+            # Получаем метаданные записи
             result = self.api_request("GET", f"/bot/recordings/{recording_id}", token=token)
             recording = result["data"]
             filename = recording.get("originalFilename", recording["filename"])
 
+            logger.info(f"Recording metadata: filename={filename}")
+
+            # Скачиваем файл
             download_url = f"{self.api_base}/bot/recordings/{recording_id}/download"
             headers = {"Authorization": f"Bearer {token}"}
 
+            logger.info(f"Downloading from: {download_url}")
+
             response = requests.get(download_url, headers=headers, timeout=60, stream=True)
+
+            logger.info(f"Download response status: {response.status_code}")
 
             if response.status_code == 401:
                 authorized_users.pop(user_id, None)
                 await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
                 return
             elif response.status_code == 404:
+                logger.error(f"File not found: {recording_id}")
                 await query.answer("❌ Файл не найден.", show_alert=True)
                 return
             elif response.status_code >= 400:
+                logger.error(f"Download error: {response.status_code} - {response.text}")
                 await query.answer(f"❌ Ошибка скачивания: {response.status_code}", show_alert=True)
                 return
 
@@ -706,15 +718,19 @@ class TelegramBot:
             file_buffer = BytesIO(response.content)
             file_buffer.name = filename
 
+            logger.info(f"Sending file: {filename}, size={len(response.content)} bytes")
+
             await query.bot.send_document(
                 chat_id=query.message.chat_id,
                 document=file_buffer,
                 filename=filename,
                 caption=f"📼 {filename}",
-                read_timeout=60
+                read_timeout=60,
+                write_timeout=60
             )
 
             await query.answer("✅ Файл отправлен!")
+            logger.info(f"File sent successfully: {filename}")
 
         except requests.exceptions.Timeout:
             logger.error(f"Download timeout for recording {recording_id}")
@@ -724,13 +740,14 @@ class TelegramBot:
                 show_alert=True
             )
         except APIError as e:
+            logger.error(f"API error during download: {e.error_type} - {e.message}")
             if e.error_type == "session_expired":
                 authorized_users.pop(user_id, None)
                 await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
             else:
                 await query.answer(f"❌ Ошибка: {e.message}", show_alert=True)
         except Exception as e:
-            logger.error(f"Download error: {e}")
+            logger.error(f"Download error: {e}", exc_info=True)
             await query.answer(
                 "❌ Ошибка при скачивании.\n"
                 "Попробуйте позже или обратитесь к разработчику.",
