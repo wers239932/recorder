@@ -377,51 +377,8 @@ public class BotController {
     // Вспомогательные методы
 
     /**
-     * Привязка устройства к пользователю.
-     */
-    @PostMapping("/bot/devices/link/{deviceLogin}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> linkDevice(
-            @PathVariable String deviceLogin,
-            @RequestHeader("Authorization") String authorizationHeader) {
-
-        UserEntity user = authenticateUser(authorizationHeader);
-
-        boolean linked = deviceAuthService.linkDeviceToUser(deviceLogin, user.getId());
-        if (!linked) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Устройство не найдено: " + deviceLogin);
-        }
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("message", "Устройство успешно привязано");
-        data.put("deviceLogin", deviceLogin);
-
-        return ResponseEntity.ok(ApiResponse.success(data));
-    }
-
-    /**
-     * Отвязка устройства от пользователя.
-     */
-    @DeleteMapping("/bot/devices/unlink/{deviceLogin}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> unlinkDevice(
-            @PathVariable String deviceLogin,
-            @RequestHeader("Authorization") String authorizationHeader) {
-
-        UserEntity user = authenticateUser(authorizationHeader);
-
-        boolean unlinked = deviceAuthService.unlinkDevice(deviceLogin);
-        if (!unlinked) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Устройство не найдено: " + deviceLogin);
-        }
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("message", "Устройство успешно отвязано");
-        data.put("deviceLogin", deviceLogin);
-
-        return ResponseEntity.ok(ApiResponse.success(data));
-    }
-
-    /**
      * Список устройств пользователя.
+     * В модели 1:1 возвращает логин пользователя (устройство автоматически привязывается при первой аутентификации).
      */
     @GetMapping("/bot/devices")
     public ResponseEntity<ApiResponse<List<String>>> getUserDevices(

@@ -26,11 +26,8 @@ import java.util.Map;
  * Контроллер для интеграции с устройствами (ESP32-C6 и другие).
  *
  * API Endpoints:
- * - POST /api/v1/device/auth/login - аутентификация устройства
+ * - POST /api/v1/device/auth/login - аутентификация устройства (1:1 с пользователем)
  * - GET  /api/v1/device/command - получение команды для устройства
- * - POST /api/v1/device/link/{deviceLogin} - привязка устройства к пользователю
- * - DELETE /api/v1/device/unlink/{deviceLogin} - отвязка устройства
- * - GET  /api/v1/device/list - список устройств пользователя
  */
 @Slf4j
 @RestController
@@ -42,7 +39,8 @@ public class DeviceIntegrationController {
 
     /**
      * Аутентификация устройства.
-     * Если устройство не найдено — создаётся автоматически.
+     * Логин и пароль должны совпадать с учётными данными пользователя Telegram.
+     * При успешной аутентификации устройство автоматически привязывается к пользователю.
      */
     @PostMapping("/device/auth/login")
     public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody LoginRequest request) {
@@ -74,73 +72,6 @@ public class DeviceIntegrationController {
             "recording", command.recording(),
             "sequence", command.sequence()
         )));
-    }
-
-    /**
-     * Привязка устройства к пользователю.
-     * Требует Bearer-токен пользователя в заголовке Authorization.
-     */
-    @PostMapping("/device/link/{deviceLogin}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> linkDevice(
-            @PathVariable String deviceLogin,
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-
-        String userToken = extractBearerToken(authorizationHeader);
-        // Здесь нужна валидация токена пользователя через UserService
-        // Для простоты передаём login как идентификатор (в реальной реализации нужно валидировать токен)
-        // TODO: добавить валидацию токена пользователя
-
-        boolean linked = deviceAuthService.linkDeviceToUser(deviceLogin, "pending-user-id");
-        if (!linked) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Device not found: " + deviceLogin);
-        }
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("message", "Device linked successfully");
-        data.put("deviceLogin", deviceLogin);
-
-        return ResponseEntity.ok(ApiResponse.success(data));
-    }
-
-    /**
-     * Отвязка устройства от пользователя.
-     */
-    @DeleteMapping("/device/unlink/{deviceLogin}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> unlinkDevice(
-            @PathVariable String deviceLogin,
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-
-        boolean unlinked = deviceAuthService.unlinkDevice(deviceLogin);
-        if (!unlinked) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Device not found: " + deviceLogin);
-        }
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("message", "Device unlinked successfully");
-        data.put("deviceLogin", deviceLogin);
-
-        return ResponseEntity.ok(ApiResponse.success(data));
-    }
-
-    /**
-     * Получение списка устройств пользователя.
-     */
-    @GetMapping("/device/list")
-    public ResponseEntity<ApiResponse<List<String>>> getDevices(
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
-
-        String userToken = extractBearerToken(authorizationHeader);
-        // TODO: извлечь userId из токена пользователя
-        List<String> devices = deviceAuthService.getDevicesByUser("pending-user-id");
-
-        return ResponseEntity.ok(ApiResponse.success(devices));
-    }
-
-    private String extractBearerToken(String authorizationHeader) {
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing or invalid Authorization header");
-        }
-        return authorizationHeader.substring(7).trim();
     }
 
     public record LoginRequest(

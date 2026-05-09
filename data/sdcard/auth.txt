@@ -1,6 +1,6 @@
 {
-  "login": "0006",
-  "password": "esp32_device_secret_key",
+  "login": "testuser",
+  "password": "password123",
   "server_url": "http://192.168.1.12:8080/api/v1/device/auth/login",
   "upload_url": "http://192.168.1.12:8080/api/v1/data/upload",
   "command_url": "http://192.168.1.12:8080/api/v1/device/command"

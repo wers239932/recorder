@@ -28,6 +28,20 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
      */
     @Query(value = "SELECT * FROM users WHERE login = ?1 LIMIT 1", nativeQuery = true)
     List<UserEntity> findByLogin(String login);
+
+    /**
+     * Найти первого пользователя по логину.
+     */
+    default Optional<UserEntity> findFirstByLogin(String login) {
+        List<UserEntity> users = findByLogin(login);
+        return users.isEmpty() ? Optional.empty() : Optional.of(users.get(0));
+    }
+
+    /**
+     * Найти пользователя по логину и хешу пароля (для аутентификации устройства).
+     */
+    @Query(value = "SELECT * FROM users WHERE login = ?1 AND password_hash = ?2 LIMIT 1", nativeQuery = true)
+    Optional<UserEntity> findByLoginAndPasswordHash(String login, String passwordHash);
     
     /**
      * Найти пользователя по имени пользователя.
