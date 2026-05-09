@@ -37,7 +37,7 @@ SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8080")
 API_BASE = f"{SERVER_URL}/api/v1"
 
 # Состояния для ConversationHandler
-LOGIN, LOGIN_PASSWORD, REGISTER, REGISTER_PASSWORD, RENAME = range(5)
+LOGIN, LOGIN_PASSWORD, REGISTER, REGISTER_PASSWORD, RENAME, LINK_DEVICE = range(6)
 
 # Хранилище авторизованных пользователей
 authorized_users: Dict[int, str] = {}
@@ -187,8 +187,14 @@ class TelegramBot:
             "• ✂️ Удалить\n"
             "• 📋 Краткое содержание\n"
             "• 📄 Текстовая расшифровка\n\n"
+            "📱 Устройства (требуется авторизация):\n"
+            "/devices - список привязанных устройств\n"
+            "/link_device - привязать устройство ESP32-C6\n"
+            "При нажатии на устройство доступны:\n"
+            "• ❌ Отвязать устройство\n\n"
             "💡 Советы:\n"
             "• Все операции с записями выполняются только для ваших файлов\n"
+            "• Записи с привязанных устройств также отображаются в /recordings\n"
             "• Сессия истекает через 24 часа\n"
             "• Используйте уникальные логины при регистрации"
         )
@@ -417,6 +423,213 @@ class TelegramBot:
             "✅ Вы вышли из аккаунта!\n\n"
             "Используйте /login для повторного входа."
         )
+
+    async def devices_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Список привязанных устройств пользователя"""
+        if not await self.check_authorization(update, context):
+            return
+
+        user_id = update.effective_user.id
+        token = self.get_user_token(user_id)
+
+        try:
+            result = self.api_request("GET", "/bot/devices", token=token)
+            devices = result["data"]
+
+            if not devices:
+                await update.message.reply_text(
+                    "📱 У вас пока нет привязанных устройств.\n\n"
+                    "Для привязки устройства используйте команду:\n"
+                    "/link_device <логин_устройства>\n\n"
+                    "Пример: /link_device 0006"
+                )
+                return
+
+            keyboard = []
+            for device_login in devices:
+                button_text = f"📼 {device_login}"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"device:{device_login}")])
+            keyboard.append([InlineKeyboardButton("➕ Привязать устройство", callback_data="link_new_device")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                f"📱 Ваши устройства ({len(devices)}):\n\n"
+                "Нажмите на устройство для управления:",
+                reply_markup=reply_markup
+            )
+
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(user_id, None)
+                await update.message.reply_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "connection_error":
+                await update.message.reply_text(
+                    "❌ Сервер временно недоступен.\n"
+                    "Пожалуйста, попробуйте позже."
+                )
+            else:
+                await update.message.reply_text(f"❌ Ошибка: {e.message}")
+        except Exception as e:
+            logger.error(f"Unexpected devices error: {e}")
+            await update.message.reply_text(
+                "❌ Произошла непредвиденная ошибка.\n"
+                "Пожалуйста, попробуйте позже."
+            )
+
+    async def link_device_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Начало привязки устройства"""
+        if not await self.check_authorization(update, context):
+            return ConversationHandler.END
+
+        args = context.args
+        if args and len(args) > 0:
+            # Логин устройства передан в команде
+            device_login = args[0].strip()
+            return await self.process_link_device(update, context, device_login)
+
+        await update.message.reply_text(
+            "🔗 Привязка устройства\n\n"
+            "Введите логин устройства (например, MAC-адрес):\n\n"
+            "Пример: 0006"
+        )
+
+        return LINK_DEVICE
+
+    async def process_link_device(self, update: Update, context: ContextTypes.DEFAULT_TYPE, device_login: str = None) -> int:
+        """Обработка привязки устройства"""
+        user_id = update.effective_user.id
+        token = self.get_user_token(user_id)
+
+        if device_login is None:
+            device_login = update.message.text.strip()
+
+        if not device_login:
+            await update.message.reply_text(
+                "❌ Логин устройства не может быть пустым!\n"
+                "Попробуйте еще раз:"
+            )
+            return LINK_DEVICE
+
+        try:
+            result = self.api_request("POST", f"/bot/devices/link/{device_login}", token=token)
+
+            await update.message.reply_text(
+                f"✅ Устройство '{device_login}' успешно привязано!\n\n"
+                "Теперь записи с этого устройства будут доступны в /recordings"
+            )
+
+            return ConversationHandler.END
+
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(user_id, None)
+                await update.message.reply_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+                return ConversationHandler.END
+            elif e.error_type == "not_found":
+                await update.message.reply_text(
+                    f"❌ Устройство '{device_login}' не найдено.\n\n"
+                    "Проверьте правильность логина устройства."
+                )
+                return ConversationHandler.END
+            else:
+                await update.message.reply_text(f"❌ Ошибка привязки: {e.message}")
+                return ConversationHandler.END
+
+        except Exception as e:
+            logger.error(f"Link device error: {e}")
+            await update.message.reply_text(
+                "❌ Произошла непредвиденная ошибка.\n"
+                "Пожалуйста, попробуйте позже."
+            )
+            return ConversationHandler.END
+
+    async def unlink_device_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Отвязка устройства (вызывается через callback)"""
+        query = update.callback_query
+        await query.answer()
+
+        try:
+            device_login = query.data.split(":")[1]
+            user_id = update.effective_user.id
+            token = self.get_user_token(user_id)
+
+            self.api_request("DELETE", f"/bot/devices/unlink/{device_login}", token=token)
+
+            await query.edit_message_text(
+                f"✅ Устройство '{device_login}' успешно отвязано.\n\n"
+                "Записи с этого устройства больше не будут отображаться в вашем списке."
+            )
+
+        except APIError as e:
+            if e.error_type == "session_expired":
+                authorized_users.pop(user_id, None)
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
+            elif e.error_type == "not_found":
+                await query.edit_message_text(
+                    f"❌ Устройство '{device_login}' не найдено."
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {e.message}")
+        except Exception as e:
+            logger.error(f"Unlink device error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
+
+    async def device_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработка нажатия на устройство"""
+        query = update.callback_query
+        await query.answer()
+
+        try:
+            device_login = query.data.split(":")[1]
+
+            keyboard = [
+                [InlineKeyboardButton("❌ Отвязать", callback_data=f"unlink_device:{device_login}")],
+                [InlineKeyboardButton("🔙 Назад", callback_data="back_to_devices")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                f"📼 Устройство: {device_login}\n\n"
+                "Выберите действие:",
+                reply_markup=reply_markup
+            )
+
+        except Exception as e:
+            logger.error(f"Device callback error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
+
+    async def back_to_devices_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Возврат к списку устройств"""
+        query = update.callback_query
+        await query.answer()
+
+        # Перезапускаем команду /devices
+        await self.devices_command(update, context)
+
+    async def link_new_device_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Начало привязки нового устройства из меню"""
+        await update.message.reply_text(
+            "🔗 Привязка устройства\n\n"
+            "Введите логин устройства (например, MAC-адрес):\n\n"
+            "Пример: 0006\n\n"
+            "Или отправьте /cancel для отмены."
+        )
+
+        return LINK_DEVICE
 
     # Работа с записями
     async def recordings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1047,12 +1260,12 @@ class TelegramBot:
     async def unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обработчик неизвестных команд"""
         command = update.message.text.split()[0] if update.message.text else "/unknown"
-        
+
         # Игнорируем известные команды, которые уже обработаны
-        known_commands = ["/start", "/help", "/logout", "/recordings", "/register", "/login", "/cancel"]
+        known_commands = ["/start", "/help", "/logout", "/recordings", "/register", "/login", "/cancel", "/devices", "/link_device"]
         if command.lower() in known_commands:
             return
-        
+
         await update.message.reply_text(
             "❌ Неизвестная команда!\n\n"
             "Используйте /help для просмотра доступных команд."
@@ -1139,16 +1352,33 @@ def main() -> None:
         per_message=False,
     )
 
+    # ConversationHandler для привязки устройства
+    link_device_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("link_device", bot.link_device_command)],
+        states={
+            LINK_DEVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.process_link_device)],
+        },
+        fallbacks=[
+            CommandHandler("cancel", bot.cancel_conversation),
+            CommandHandler("devices", bot.devices_command),
+        ],
+        per_message=False,
+        allow_reentry=True,
+    )
+
     # Регистрация обработчиков - ВАЖНО: сначала конкретные, потом общие
     application.add_handler(register_conv_handler)
     application.add_handler(login_conv_handler)
     application.add_handler(rename_conv_handler)
+    application.add_handler(link_device_conv_handler)
 
     # Обработчики команд
     application.add_handler(CommandHandler("start", bot.start_command))
     application.add_handler(CommandHandler("help", bot.help_command))
     application.add_handler(CommandHandler("logout", bot.logout_command))
     application.add_handler(CommandHandler("recordings", bot.recordings_command))
+    application.add_handler(CommandHandler("devices", bot.devices_command))
+    application.add_handler(CommandHandler("link_device", bot.link_device_command))
 
     # Обработчики callback'ов
     application.add_handler(CallbackQueryHandler(bot.recording_callback, pattern="^recording:"))
@@ -1159,6 +1389,10 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(bot.summarize_callback, pattern="^summarize:"))
     application.add_handler(CallbackQueryHandler(bot.transcribe_callback, pattern="^transcribe:"))
     application.add_handler(CallbackQueryHandler(bot.back_to_recordings_callback, pattern="^back_to_recordings$"))
+    application.add_handler(CallbackQueryHandler(bot.device_callback, pattern="^device:"))
+    application.add_handler(CallbackQueryHandler(bot.unlink_device_command, pattern="^unlink_device:"))
+    application.add_handler(CallbackQueryHandler(bot.back_to_devices_callback, pattern="^back_to_devices$"))
+    application.add_handler(CallbackQueryHandler(bot.link_new_device_callback, pattern="^link_new_device$"))
 
     # Обработчик неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ
     application.add_handler(MessageHandler(filters.COMMAND, bot.unknown_command))

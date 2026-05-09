@@ -43,6 +43,12 @@ public interface RecordingService {
      * Загрузка аудио записи с указанием пользователя или устройства.
      */
     RecordingResponse uploadRecording(MultipartFile file, UploadRecordingRequest request, String clientIp, String userId, String deviceLogin) throws IOException;
+
+    /**
+     * Загрузка записи от имени устройства, привязанного к пользователю.
+     */
+    RecordingResponse uploadRecordingForUserFromDevice(MultipartFile file, UploadRecordingRequest request, String clientIp, String userId, String deviceLogin) throws IOException;
+
     /**
      * Получение записи по ID.
      *
@@ -68,6 +74,7 @@ public interface RecordingService {
     Page<RecordingResponse> getUserRecordings(String userId, Pageable pageable);
     /**
      * Получение всех записей пользователя (без пагинации).
+     * Включает записи пользователя и записи с его привязанных устройств.
      */
     List<RecordingResponse> getAllUserRecordings(String userId);
     /**

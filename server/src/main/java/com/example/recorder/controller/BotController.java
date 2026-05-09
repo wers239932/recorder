@@ -1,5 +1,6 @@
 package com.example.recorder.controller;
 
+import com.example.recorder.auth.DeviceAuthService;
 import com.example.recorder.dto.ApiResponse;
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.RecordingsListResponse;
@@ -55,10 +56,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Validated
 public class BotController {
-    
+
     private final UserService userService;
     private final RecordingService recordingService;
     private final TranscriptionService transcriptionService;
+    private final DeviceAuthService deviceAuthService;
     
     /**
      * Регистрация нового пользователя.
@@ -373,7 +375,65 @@ public class BotController {
     }
     
     // Вспомогательные методы
-    
+
+    /**
+     * Привязка устройства к пользователю.
+     */
+    @PostMapping("/bot/devices/link/{deviceLogin}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> linkDevice(
+            @PathVariable String deviceLogin,
+            @RequestHeader("Authorization") String authorizationHeader) {
+
+        UserEntity user = authenticateUser(authorizationHeader);
+
+        boolean linked = deviceAuthService.linkDeviceToUser(deviceLogin, user.getId());
+        if (!linked) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Устройство не найдено: " + deviceLogin);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("message", "Устройство успешно привязано");
+        data.put("deviceLogin", deviceLogin);
+
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
+    /**
+     * Отвязка устройства от пользователя.
+     */
+    @DeleteMapping("/bot/devices/unlink/{deviceLogin}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> unlinkDevice(
+            @PathVariable String deviceLogin,
+            @RequestHeader("Authorization") String authorizationHeader) {
+
+        UserEntity user = authenticateUser(authorizationHeader);
+
+        boolean unlinked = deviceAuthService.unlinkDevice(deviceLogin);
+        if (!unlinked) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Устройство не найдено: " + deviceLogin);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("message", "Устройство успешно отвязано");
+        data.put("deviceLogin", deviceLogin);
+
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
+    /**
+     * Список устройств пользователя.
+     */
+    @GetMapping("/bot/devices")
+    public ResponseEntity<ApiResponse<List<String>>> getUserDevices(
+            @RequestHeader("Authorization") String authorizationHeader) {
+
+        UserEntity user = authenticateUser(authorizationHeader);
+
+        List<String> devices = deviceAuthService.getDevicesByUser(user.getId());
+
+        return ResponseEntity.ok(ApiResponse.success(devices));
+    }
+
     private UserEntity authenticateUser(String authorizationHeader) {
         String token = extractToken(authorizationHeader);
         return userService.validateToken(token)

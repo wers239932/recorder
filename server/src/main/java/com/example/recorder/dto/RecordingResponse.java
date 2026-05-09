@@ -23,6 +23,8 @@ public class RecordingResponse {
     private String contentType;
     private String deviceInfo;
     private String deviceIp;
+    private String deviceLogin;
+    private String userId;
     private Integer durationSeconds;
     private Integer sampleRate;
     private Integer channels;
@@ -59,6 +61,8 @@ public class RecordingResponse {
             .contentType(entity.getContentType())
             .deviceInfo(entity.getDeviceInfo())
             .deviceIp(entity.getDeviceIp())
+            .deviceLogin(entity.getDeviceLogin())
+            .userId(entity.getUserId())
             .durationSeconds(entity.getDurationSeconds())
             .sampleRate(entity.getSampleRate())
             .channels(entity.getChannels())

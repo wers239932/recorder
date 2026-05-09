@@ -71,6 +71,12 @@ public interface RecordingRepository extends JpaRepository<RecordingEntity, Stri
     Page<RecordingEntity> findLatest(Pageable pageable);
 
     /**
+     * Поиск записей по списку device_login.
+     */
+    @Query("SELECT r FROM RecordingEntity r WHERE r.deviceLogin IN :deviceLogins ORDER BY r.createdAt DESC")
+    List<RecordingEntity> findByDeviceLoginIn(@Param("deviceLogins") List<String> deviceLogins);
+
+    /**
      * Удаление записей по статусу FAILED (для очистки).
      */
     void deleteByStatus(RecordingStatus status);

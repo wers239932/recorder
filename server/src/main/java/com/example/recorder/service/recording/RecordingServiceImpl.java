@@ -5,6 +5,7 @@ import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.UploadRecordingRequest;
 import com.example.recorder.entity.RecordingEntity;
 import com.example.recorder.entity.SummaryEntity;
+import com.example.recorder.repository.DeviceRepository;
 import com.example.recorder.repository.RecordingRepository;
 import com.example.recorder.repository.SummaryRepository;
 import com.example.recorder.service.summary.SummaryService;
@@ -27,6 +28,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * Реализация сервиса для управления аудио записями.
@@ -40,6 +42,7 @@ public class RecordingServiceImpl implements RecordingService {
     private final SummaryRepository summaryRepository;
     private final SummaryService summaryService;
     private final SummaryClientProperties summaryProperties;
+    private final DeviceRepository deviceRepository;
 
     @Value("${recorder.storage.path:./recordings}")
     private String storagePath;
@@ -366,7 +369,28 @@ public class RecordingServiceImpl implements RecordingService {
             String clientIp,
             String userId) throws IOException {
         // Загрузка с привязкой к пользователю
-        return uploadRecording(file, request, clientIp, userId);
+        return uploadRecording(file, request, clientIp, userId, null);
+    }
+
+    /**
+     * Загрузка записи от имени устройства, привязанного к пользователю.
+     *
+     * @param file WAV-файл
+     * @param request Данные запроса
+     * @param clientIp IP адрес клиента
+     * @param userId ID пользователя
+     * @param deviceLogin Логин устройства
+     * @return информация о загруженной записи
+     */
+    @Transactional
+    public RecordingResponse uploadRecordingForUserFromDevice(
+            MultipartFile file,
+            UploadRecordingRequest request,
+            String clientIp,
+            String userId,
+            String deviceLogin) throws IOException {
+        // Загрузка с привязкой к пользователю и устройству
+        return uploadRecording(file, request, clientIp, userId, deviceLogin);
     }
 
     @Override
@@ -387,8 +411,22 @@ public class RecordingServiceImpl implements RecordingService {
     @Override
     @Transactional(readOnly = true)
     public List<RecordingResponse> getAllUserRecordings(String userId) {
-        return recordingRepository.findByUserId(userId)
+        // Получаем записи пользователя
+        List<RecordingEntity> userRecordings = recordingRepository.findByUserId(userId);
+        
+        // Получаем записи с привязанных устройств пользователя
+        List<String> deviceLogins = deviceRepository.findByUserId(userId)
                 .stream()
+                .map(d -> d.getLogin())
+                .toList();
+        
+        List<RecordingEntity> deviceRecordings = deviceLogins.isEmpty() 
+            ? List.of() 
+            : recordingRepository.findByDeviceLoginIn(deviceLogins);
+        
+        // Объединяем и сортируем по дате создания (новые сверху)
+        return Stream.concat(userRecordings.stream(), deviceRecordings.stream())
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .map(entity -> RecordingResponse.fromEntity(entity, ""))
                 .toList();
     }

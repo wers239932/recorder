@@ -144,25 +144,29 @@ public class RecordingController {
             HttpServletRequest servletRequest) {
 
         String clientIp = getClientIp(servletRequest, xForwardedFor, xRealIp);
-        
+
         // Аутентификация устройства через Bearer-токен или X-Device-Token
         String deviceLogin = null;
-        
+        String userId = null;
+
         // Пробуем Bearer-токен из Authorization заголовка
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7).trim();
             if (!token.isEmpty()) {
                 deviceLogin = deviceAuthService.validateToken(token).orElse(null);
+                // Получаем userId, если устройство привязано к пользователю
+                userId = deviceAuthService.getUserIdFromToken(token).orElse(null);
             }
         }
-        
+
         // Если не нашли, пробуем X-Device-Token
         if (deviceLogin == null && deviceToken != null && !deviceToken.isBlank()) {
-            deviceLogin = deviceAuthService.validateToken(deviceToken).orElse("legacy-device");
+            deviceLogin = deviceAuthService.validateToken(deviceToken).orElse(null);
+            userId = deviceAuthService.getUserIdFromToken(deviceToken).orElse(null);
         }
-        
+
         if (deviceLogin != null) {
-            log.info("Raw upload authenticated as device={} from IP={}", deviceLogin, clientIp);
+            log.info("Raw upload authenticated as device={} from IP={}, userId={}", deviceLogin, clientIp, userId);
         } else {
             log.info("Raw upload accepted in compatibility mode from IP={}", clientIp);
         }
@@ -184,9 +188,10 @@ public class RecordingController {
 
         try {
             // Загрузка с deviceLogin для устройств
-            RecordingResponse response = recordingService.uploadRecording(tempFile, request, clientIp, null, deviceLogin);
+            // userId будет null, если устройство не привязано к пользователю
+            RecordingResponse response = recordingService.uploadRecording(tempFile, request, clientIp, userId, deviceLogin);
 
-            log.info("Recording uploaded (raw): id={}, size={}, deviceLogin={}", response.getId(), response.getFileSize(), deviceLogin);
+            log.info("Recording uploaded (raw): id={}, size={}, deviceLogin={}, userId={}", response.getId(), response.getFileSize(), deviceLogin, userId);
 
             // Добавляем информацию о суммаризации в ответ
             String summaryStatus = recordingService.getSummarizationStatus(response.getId());
