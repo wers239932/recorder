@@ -720,7 +720,7 @@ class TelegramBot:
 
             logger.info(f"Sending file: {filename}, size={len(response.content)} bytes")
 
-            await query.bot.send_document(
+            await context.bot.send_document(
                 chat_id=query.message.chat_id,
                 document=file_buffer,
                 filename=filename,
