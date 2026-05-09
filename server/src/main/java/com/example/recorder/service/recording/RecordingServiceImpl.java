@@ -50,6 +50,9 @@ public class RecordingServiceImpl implements RecordingService {
     @Value("${recorder.storage.max-file-size:104857600}")
     private long maxFileSize;
 
+    @Value("${server.base-url:http://localhost:8080}")
+    private String baseUrl;
+
     @PostConstruct
     public void init() {
         try {
@@ -212,7 +215,19 @@ public class RecordingServiceImpl implements RecordingService {
     @Override
     public Optional<Path> getRecordingFilePath(String id, String userId) {
         return recordingRepository.findById(id)
-                .filter(recording -> userId.equals(recording.getUserId()))
+                .filter(recording -> {
+                    // Проверяем, что запись принадлежит пользователю ИЛИ его устройству
+                    if (userId.equals(recording.getUserId())) {
+                        return true;
+                    }
+                    // Проверяем, есть ли у пользователя устройство с таким deviceLogin
+                    if (recording.getDeviceLogin() != null) {
+                        return deviceRepository.findByUserId(userId)
+                                .stream()
+                                .anyMatch(d -> d.getLogin().equals(recording.getDeviceLogin()));
+                    }
+                    return false;
+                })
                 .map(recording -> Paths.get(storagePath, recording.getFilename()));
     }
 
@@ -229,11 +244,24 @@ public class RecordingServiceImpl implements RecordingService {
     @Override
     @Transactional(readOnly = true)
     public long[] getUserStorageStats(String userId) {
-        List<RecordingEntity> recordings = recordingRepository.findByUserId(userId);
-        long count = recordings.size();
-        long totalSize = recordings.stream()
-                .mapToLong(RecordingEntity::getFileSize)
-                .sum();
+        // Получаем записи пользователя
+        List<RecordingEntity> userRecordings = recordingRepository.findByUserId(userId);
+        
+        // Получаем записи с устройств пользователя
+        List<String> deviceLogins = deviceRepository.findByUserId(userId)
+                .stream()
+                .map(d -> d.getLogin())
+                .toList();
+        
+        List<RecordingEntity> deviceRecordings = deviceLogins.isEmpty()
+            ? List.of()
+            : recordingRepository.findByDeviceLoginIn(deviceLogins);
+        
+        // Объединяем
+        long count = userRecordings.size() + deviceRecordings.size();
+        long totalSize = userRecordings.stream().mapToLong(RecordingEntity::getFileSize).sum()
+                + deviceRecordings.stream().mapToLong(RecordingEntity::getFileSize).sum();
+        
         return new long[]{count, totalSize};
     }
 
@@ -397,8 +425,20 @@ public class RecordingServiceImpl implements RecordingService {
     @Transactional(readOnly = true)
     public Optional<RecordingResponse> getRecordingById(String id, String userId) {
         return recordingRepository.findById(id)
-                .filter(recording -> userId.equals(recording.getUserId()))
-                .map(entity -> RecordingResponse.fromEntity(entity, ""));
+                .filter(recording -> {
+                    // Проверяем, что запись принадлежит пользователю ИЛИ его устройству
+                    if (userId.equals(recording.getUserId())) {
+                        return true;
+                    }
+                    // Проверяем, есть ли у пользователя устройство с таким deviceLogin
+                    if (recording.getDeviceLogin() != null) {
+                        return deviceRepository.findByUserId(userId)
+                                .stream()
+                                .anyMatch(d -> d.getLogin().equals(recording.getDeviceLogin()));
+                    }
+                    return false;
+                })
+                .map(entity -> RecordingResponse.fromEntity(entity, baseUrl));
     }
 
     @Override
@@ -427,7 +467,7 @@ public class RecordingServiceImpl implements RecordingService {
         // Объединяем и сортируем по дате создания (новые сверху)
         return Stream.concat(userRecordings.stream(), deviceRecordings.stream())
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-                .map(entity -> RecordingResponse.fromEntity(entity, ""))
+                .map(entity -> RecordingResponse.fromEntity(entity, baseUrl))
                 .toList();
     }
 

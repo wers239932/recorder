@@ -508,8 +508,41 @@ class TelegramBot:
         query = update.callback_query
         await query.answer()
 
-        # Перезапускаем команду /devices
-        await self.devices_command(update, context)
+        # Перезапускаем команду /devices, но используем query.message для ответа
+        user_id = update.effective_user.id
+        token = self.get_user_token(user_id)
+
+        try:
+            result = self.api_request("GET", "/bot/devices", token=token)
+            devices = result["data"]
+
+            if not devices:
+                await query.edit_message_text(
+                    "📱 У вас пока нет привязанных устройств.\n\n"
+                    "Устройство автоматически привязывается при первой аутентификации.\n\n"
+                    "Используйте те же логин и пароль, что и при входе в бота."
+                )
+                return
+
+            keyboard = []
+            for device_login in devices:
+                button_text = f"📼 {device_login}"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"device:{device_login}")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                f"📱 Ваши устройства ({len(devices)}):\n\n"
+                "Устройство автоматически привязано при первой аутентификации.\n\n"
+                "Нажмите на устройство для управления:",
+                reply_markup=reply_markup
+            )
+
+        except Exception as e:
+            logger.error(f"Back to devices error: {e}")
+            await query.edit_message_text(
+                "❌ Произошла непредвиденная ошибка."
+            )
 
     # Работа с записями
     async def recordings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -656,8 +689,8 @@ class TelegramBot:
             download_url = f"{self.api_base}/bot/recordings/{recording_id}/download"
             headers = {"Authorization": f"Bearer {token}"}
 
-            response = requests.get(download_url, headers=headers, timeout=60)
-            
+            response = requests.get(download_url, headers=headers, timeout=60, stream=True)
+
             if response.status_code == 401:
                 authorized_users.pop(user_id, None)
                 await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
@@ -669,30 +702,40 @@ class TelegramBot:
                 await query.answer(f"❌ Ошибка скачивания: {response.status_code}", show_alert=True)
                 return
 
+            from io import BytesIO
+            file_buffer = BytesIO(response.content)
+            file_buffer.name = filename
+
             await query.bot.send_document(
                 chat_id=query.message.chat_id,
-                document=response.content,
+                document=file_buffer,
                 filename=filename,
-                caption=f"📥 Файл: {filename}"
+                caption=f"📼 {filename}",
+                read_timeout=60
             )
 
-            await query.answer("✅ Файл отправлен!", show_alert=False)
+            await query.answer("✅ Файл отправлен!")
 
         except requests.exceptions.Timeout:
+            logger.error(f"Download timeout for recording {recording_id}")
             await query.answer(
-                "⏱️ Превышено время скачивания.\n"
-                "Файл слишком большой или соединение нестабильно.",
+                "⏱️ Превышено время ожидания.\n"
+                "Файл слишком большой или соединение медленное.",
                 show_alert=True
             )
         except APIError as e:
             if e.error_type == "session_expired":
-                authorized_users.pop(update.effective_user.id, None)
+                authorized_users.pop(user_id, None)
                 await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
             else:
                 await query.answer(f"❌ Ошибка: {e.message}", show_alert=True)
         except Exception as e:
             logger.error(f"Download error: {e}")
-            await query.answer("❌ Произошла ошибка при скачивании.", show_alert=True)
+            await query.answer(
+                "❌ Ошибка при скачивании.\n"
+                "Попробуйте позже или обратитесь к разработчику.",
+                show_alert=True
+            )
 
     async def rename_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Начало переименования записи"""
