@@ -213,6 +213,7 @@ public class RecordingServiceImpl implements RecordingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Path> getRecordingFilePath(String id, String userId) {
         return recordingRepository.findById(id)
                 .filter(recording -> {
