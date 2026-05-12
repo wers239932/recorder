@@ -9,7 +9,9 @@
       "Bash(true)",
       "Bash(nohup *)",
       "Bash(conda *)",
-      "Bash(uvicorn *)"
+      "Bash(uvicorn *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   },
   "$version": 3

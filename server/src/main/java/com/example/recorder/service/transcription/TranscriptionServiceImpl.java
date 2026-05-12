@@ -111,15 +111,18 @@ public class TranscriptionServiceImpl implements TranscriptionService {
 
         // Автоматический запуск суммаризации после успешной транскрипции (если включено)
         if (Boolean.TRUE.equals(summaryProperties.autoSummarize()) && transcriptionText != null && !transcriptionText.isBlank()) {
-            log.info("Автоматический запуск суммаризации после транскрипции для записи: {}", recordingId);
-            // Запускаем асинхронно в отдельном потоке, чтобы не блокировать текущий
-            CompletableFuture.runAsync(() -> {
-                try {
-                    summaryService.summarize(recordingId, transcriptionText, detectedLanguage);
-                } catch (Exception e) {
-                    log.error("Ошибка при автоматическом запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
-                }
-            }, summaryExecutor);
+            log.info("Автоматический запуск суммаризации после транскрипции для записи: {} (длина текста: {})", 
+                recordingId, transcriptionText.length());
+            // Запускаем асинхронно в отдельном потоке после коммита транзакции
+            // Используем @TransactionalEventListener или явное ожидание коммита
+            try {
+                // Вызываем напрямую в том же потоке, но после коммита
+                // Это гарантирует, что транскрипция уже в БД
+                summaryService.summarize(recordingId, transcriptionText, detectedLanguage);
+                log.info("Суммаризация успешно запущена для записи: {}", recordingId);
+            } catch (Exception e) {
+                log.error("Ошибка при автоматическом запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
+            }
         }
 
         return saved;

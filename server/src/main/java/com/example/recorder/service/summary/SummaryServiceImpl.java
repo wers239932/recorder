@@ -60,9 +60,15 @@ public class SummaryServiceImpl implements SummaryService {
     }
 
     @Override
+    @Transactional
     public void summarize(String recordingId, String transcriptionText, String language) {
-        log.info("Starting summarization for recording: {}", recordingId);
-        summarizeAsync(recordingId, transcriptionText, language);
+        log.info("Starting sync summarization for recording: {}", recordingId);
+        try {
+            summarizeSync(recordingId, transcriptionText, language);
+            log.info("Sync summarization completed for recording: {}", recordingId);
+        } catch (Exception e) {
+            log.error("Sync summarization failed for recording {}: {}", recordingId, e.getMessage(), e);
+        }
     }
 
     @Override
