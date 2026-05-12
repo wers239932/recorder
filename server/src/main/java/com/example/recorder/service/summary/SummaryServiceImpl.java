@@ -149,8 +149,10 @@ public class SummaryServiceImpl implements SummaryService {
         recording.setStatus(RecordingEntity.RecordingStatus.READY);
         recordingRepository.save(recording);
 
-        log.info("Summarization completed for recording {}: confidence={}",
-            recordingId, clientResult.confidenceScore());
+        log.info("Summarization completed for recording {}: summaryText.length={}, confidence={}",
+            recordingId, 
+            clientResult.summaryText() != null ? clientResult.summaryText().length() : 0,
+            clientResult.confidenceScore());
 
         return new SummarizationResult(
             true,

@@ -9,6 +9,9 @@ import java.util.List;
 
 /**
  * DTO ответа с информацией о суммаризации.
+ * 
+ * Примечание: Summarizer API возвращает только текст суммаризации.
+ * Поля confidenceScore, detectedLanguage, keywords не заполняются (null).
  */
 @Data
 @NoArgsConstructor
@@ -16,14 +19,14 @@ import java.util.List;
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class SummaryResponse {
-    
+
     private String id;
     private String recordingId;
-    private String summaryText;
-    private String briefSummary;
-    private List<String> keywords;
-    private Double confidenceScore;
-    private String detectedLanguage;
+    private String summaryText;         // текст от Summarizer API
+    private String briefSummary;        // не используется (null)
+    private List<String> keywords;      // не используется (null) - Summarizer API не возвращает
+    private Double confidenceScore;     // не используется (null) - Summarizer API не возвращает
+    private String detectedLanguage;    // не используется (null) - Summarizer API не возвращает
     private SummaryStatus status;
     private String errorMessage;
     private Integer retryCount;

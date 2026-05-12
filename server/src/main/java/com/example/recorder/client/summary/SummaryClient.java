@@ -20,14 +20,16 @@ public interface SummaryClient {
 
     /**
      * Результат суммаризации.
+     * Summarizer API возвращает только текст: {"summary": "..."}
+     * Остальные поля не заполняются и всегда null.
      */
     record SummaryResult(
         String taskId,
-        String summaryText,
-        String briefSummary,
-        String[] keywords,
-        Double confidenceScore,
-        String detectedLanguage,
+        String summaryText,           // текст от Summarizer API
+        String briefSummary,          // не используется (null)
+        String[] keywords,            // не используется (null)
+        Double confidenceScore,       // не используется (null) - Summarizer API не возвращает
+        String detectedLanguage,      // не используется (null) - Summarizer API не возвращает
         SummarizationStatus status,
         String errorMessage
     ) {}
