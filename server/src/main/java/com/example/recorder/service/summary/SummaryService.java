@@ -1,62 +1,42 @@
 package com.example.recorder.service.summary;
 
-import com.example.recorder.entity.RecordingEntity;
-
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Интерфейс сервиса суммаризации аудио записей.
- * Определяет контракт для асинхронной обработки аудиофайлов.
+ * Интерфейс сервиса суммаризации текстов расшифровок.
+ * Отправляет текст расшифровки в сервис суммаризации.
  */
 public interface SummaryService {
-    
+
     /**
      * Запуск асинхронной суммаризации для записи.
-     * 
+     *
      * @param recordingId ID записи
+     * @param transcriptionText Текст расшифровки аудио
      * @param language Код языка (опционально)
      * @return CompletableFuture с результатом
      */
-    CompletableFuture<SummarizationResult> summarizeAsync(String recordingId, String language);
-    
+    CompletableFuture<SummarizationResult> summarizeAsync(String recordingId, String transcriptionText, String language);
+
     /**
      * Запуск суммаризации для записи (синхронно).
-     * 
+     *
      * @param recordingId ID записи
+     * @param transcriptionText Текст расшифровки аудио
      * @param language Код языка (опционально)
      * @return результат суммаризации
      */
-    SummarizationResult summarizeSync(String recordingId, String language);
-    
+    SummarizationResult summarizeSync(String recordingId, String transcriptionText, String language);
+
     /**
      * Запуск асинхронной суммаризации (без возврата результата).
      * Упрощённый метод для вызова из RecordingService.
      *
      * @param recordingId ID записи
+     * @param transcriptionText Текст расшифровки аудио
      * @param language Код языка (опционально)
      */
-    void summarize(String recordingId, String language);
-    /**
-     * Повторная попытка суммаризации для неудачных записей.
-     *
-     * @param maxRetries Максимальное количество попыток
-     * @return количество запущенных повторных обработок
-     */
-    int retryFailedSummarizations(int maxRetries);
-    /**
-     * Отмена суммаризации для записи.
-     *
-     * @param recordingId ID записи
-     * @return true если отменено успешно
-     */
-    boolean cancelSummarization(String recordingId);
-    /**
-     * Проверка статуса суммаризации.
-     *
-     * @param recordingId ID записи
-     * @return статус суммаризации
-     */
-    SummarizationStatus getStatus(String recordingId);
+    void summarize(String recordingId, String transcriptionText, String language);
 
     /**
      * Результат суммаризации.
@@ -71,15 +51,4 @@ public interface SummaryService {
         String detectedLanguage,
         String errorMessage
     ) {}
-
-    /**
-     * Статус суммаризации.
-     */
-    enum SummarizationStatus {
-        NOT_STARTED,
-        PENDING,
-        PROCESSING,
-        COMPLETED,
-        FAILED
-    }
 }

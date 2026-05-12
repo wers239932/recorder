@@ -3,37 +3,21 @@ package com.example.recorder.client.summary;
 import reactor.core.publisher.Mono;
 
 /**
- * Интерфейс клиента для взаимодействия с сервисом суммаризации аудио.
- * Определяет контракт для отправки аудиофайлов и получения суммаризации.
+ * Интерфейс клиента для взаимодействия с сервисом суммаризации.
+ * Отправляет текст расшифровки (не аудиофайл) в Summarizer сервис.
  */
 public interface SummaryClient {
-    
+
     /**
-     * Отправка аудиофайла на суммаризацию.
-     * 
+     * Отправка текста расшифровки на суммаризацию.
+     *
      * @param recordingId ID записи в локальной БД
-     * @param audioFilePath Путь к WAV-файлу
+     * @param transcriptionText Текст расшифровки аудио
      * @param language Код языка (опционально, например "ru", "en")
      * @return результат суммаризации
      */
-    Mono<SummaryResult> summarize(String recordingId, String audioFilePath, String language);
-    
-    /**
-     * Отмена суммаризации по ID задачи.
-     * 
-     * @param taskId ID задачи суммаризации
-     * @return true если отменено успешно
-     */
-    Mono<Boolean> cancelSummarization(String taskId);
-    
-    /**
-     * Проверка статуса суммаризации.
-     * 
-     * @param taskId ID задачи суммаризации
-     * @return статус задачи
-     */
-    Mono<SummarizationStatus> getStatus(String taskId);
-    
+    Mono<SummaryResult> summarize(String recordingId, String transcriptionText, String language);
+
     /**
      * Результат суммаризации.
      */
@@ -47,7 +31,7 @@ public interface SummaryClient {
         SummarizationStatus status,
         String errorMessage
     ) {}
-    
+
     /**
      * Статус задачи суммаризации.
      */

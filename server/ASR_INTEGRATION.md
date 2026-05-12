@@ -125,6 +125,8 @@ uvicorn main:app --host 0.0.0.0 --port 8081
 
 ### API
 
+**Важно:** Summarizer принимает **текст расшифровки** (не аудиофайл).
+
 **POST /summarize**
 ```bash
 curl -X POST http://localhost:8081/summarize \

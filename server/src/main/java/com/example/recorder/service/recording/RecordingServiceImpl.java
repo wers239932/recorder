@@ -8,6 +8,7 @@ import com.example.recorder.entity.SummaryEntity;
 import com.example.recorder.repository.DeviceRepository;
 import com.example.recorder.repository.RecordingRepository;
 import com.example.recorder.repository.SummaryRepository;
+import com.example.recorder.repository.TranscriptionRepository;
 import com.example.recorder.service.summary.SummaryService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ public class RecordingServiceImpl implements RecordingService {
     private final SummaryService summaryService;
     private final SummaryClientProperties summaryProperties;
     private final DeviceRepository deviceRepository;
+    private final TranscriptionRepository transcriptionRepository;
 
     @Value("${recorder.storage.path:./recordings}")
     private String storagePath;
@@ -287,13 +289,18 @@ public class RecordingServiceImpl implements RecordingService {
                 .build();
         summaryRepository.save(summary);
 
-        summaryService.summarize(recording.getId(), language);
+        // Получаем текст расшифровки из БД
+        String transcriptionText = transcriptionRepository.findByRecordingId(recordingId)
+                .map(com.example.recorder.entity.TranscriptionEntity::getTranscriptionText)
+                .orElseThrow(() -> new IllegalArgumentException("Transcription not found for recording: " + recordingId));
+
+        summaryService.summarize(recording.getId(), transcriptionText, language);
     }
 
     @Override
     public void startSummarization(String recordingId, String language, String userId) {
         log.info("Starting summarization for recording: {} by user: {}", recordingId, userId);
-        
+
         RecordingEntity recording = recordingRepository.findById(recordingId)
                 .filter(r -> userId.equals(r.getUserId()))
                 .orElseThrow(() -> new IllegalArgumentException("Recording not found or access denied: " + recordingId));
@@ -311,13 +318,19 @@ public class RecordingServiceImpl implements RecordingService {
                 .build();
         summaryRepository.save(summary);
 
-        summaryService.summarize(recording.getId(), language);
+        // Получаем текст расшифровки из БД
+        String transcriptionText = transcriptionRepository.findByRecordingId(recordingId)
+                .map(com.example.recorder.entity.TranscriptionEntity::getTranscriptionText)
+                .orElseThrow(() -> new IllegalArgumentException("Transcription not found for recording: " + recordingId));
+
+        summaryService.summarize(recording.getId(), transcriptionText, language);
     }
 
     @Override
     public String getSummarizationStatus(String recordingId) {
-        var status = summaryService.getStatus(recordingId);
-        return status.name();
+        return summaryRepository.findByRecordingId(recordingId)
+                .map(summary -> summary.getStatus().name())
+                .orElse("NOT_STARTED");
     }
 
     /**
@@ -344,8 +357,13 @@ public class RecordingServiceImpl implements RecordingService {
                 .build();
         summaryRepository.save(summary);
 
+        // Получаем текст расшифровки из БД
+        String transcriptionText = transcriptionRepository.findByRecordingId(recording.getId())
+                .map(com.example.recorder.entity.TranscriptionEntity::getTranscriptionText)
+                .orElseThrow(() -> new IllegalArgumentException("Transcription not found for recording: " + recording.getId()));
+
         // Запускаем асинхронную суммаризацию
-        summaryService.summarize(recording.getId(), language);
+        summaryService.summarize(recording.getId(), transcriptionText, language);
     }
 
     private void validateFile(MultipartFile file) {
