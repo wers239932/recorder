@@ -19,6 +19,8 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * Реализация сервиса для работы с текстовыми расшифровками.
@@ -33,6 +35,7 @@ public class TranscriptionServiceImpl implements TranscriptionService {
     private final RecordingService recordingService;
     private final SummaryService summaryService;
     private final SummaryClientProperties summaryProperties;
+    private final Executor summaryExecutor = Executors.newSingleThreadExecutor();
 
     public TranscriptionServiceImpl(
             TranscriptionRepository transcriptionRepository,
@@ -109,11 +112,14 @@ public class TranscriptionServiceImpl implements TranscriptionService {
         // Автоматический запуск суммаризации после успешной транскрипции (если включено)
         if (Boolean.TRUE.equals(summaryProperties.autoSummarize()) && transcriptionText != null && !transcriptionText.isBlank()) {
             log.info("Автоматический запуск суммаризации после транскрипции для записи: {}", recordingId);
-            try {
-                summaryService.summarize(recordingId, transcriptionText, detectedLanguage);
-            } catch (Exception e) {
-                log.error("Ошибка при автоматическом запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
-            }
+            // Запускаем асинхронно в отдельном потоке, чтобы не блокировать текущий
+            CompletableFuture.runAsync(() -> {
+                try {
+                    summaryService.summarize(recordingId, transcriptionText, detectedLanguage);
+                } catch (Exception e) {
+                    log.error("Ошибка при автоматическом запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
+                }
+            }, summaryExecutor);
         }
 
         return saved;
