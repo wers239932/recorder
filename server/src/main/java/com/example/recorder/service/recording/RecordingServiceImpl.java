@@ -514,6 +514,7 @@ public class RecordingServiceImpl implements RecordingService {
                     String finalFilename = prepareFilename(newFilename, extension);
 
                     recording.setOriginalFilename(finalFilename);
+                    recording.setFilename(finalFilename);  // ✅ Обновляем и filename
                     recordingRepository.save(recording);
 
                     // Переименовываем файл на диске
@@ -549,6 +550,7 @@ public class RecordingServiceImpl implements RecordingService {
                     String finalFilename = prepareFilename(newFilename, extension);
 
                     recording.setOriginalFilename(finalFilename);
+                    recording.setFilename(finalFilename);  // ✅ Обновляем и filename
                     recordingRepository.save(recording);
 
                     // Переименовываем файл на диске
@@ -563,7 +565,7 @@ public class RecordingServiceImpl implements RecordingService {
                         log.warn("Failed to rename file: {}", e.getMessage());
                     }
 
-                    log.info("Recording renamed successfully: id={}, newFilename={}, userId={}", id, finalFilename, userId);
+                    log.info("Recording renamed successfully: id={}, newFilename={}", id, finalFilename);
                     return true;
                 })
                 .orElse(false);

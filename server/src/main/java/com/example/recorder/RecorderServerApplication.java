@@ -1,6 +1,7 @@
 package com.example.recorder;
 
 import com.example.recorder.config.SummaryClientProperties;
+import com.example.recorder.config.TranscriptionClientProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -8,11 +9,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Главный класс Spring Boot приложения для сервера аудиомагнитофона.
- * 
+ *
  * Сервер принимает WAV-файлы с ESP32-C6 устройства, хранит их в базе данных,
  * автоматически запускает суммаризацию через внешний сервис и предоставляет
  * REST API для управления записями.
- * 
+ *
  * Features:
  * - Загрузка WAV-файлов через multipart/form-data
  * - Хранение метаданных в БД (H2/PostgreSQL)
@@ -23,7 +24,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableScheduling
 @EnableConfigurationProperties({
-    SummaryClientProperties.class
+    SummaryClientProperties.class,
+    TranscriptionClientProperties.class
 })
 public class RecorderServerApplication {
 

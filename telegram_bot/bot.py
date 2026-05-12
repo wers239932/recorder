@@ -675,7 +675,7 @@ class TelegramBot:
     async def download_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Скачивание записи"""
         query = update.callback_query
-        await query.answer()
+        await query.answer("🔄 Загружаю файл...")
 
         try:
             recording_id = query.data.split(":")[1]
@@ -702,16 +702,24 @@ class TelegramBot:
             logger.info(f"Download response status: {response.status_code}")
 
             if response.status_code == 401:
+                # Токен истёк — пробуем обновить
+                logger.warning(f"Token expired for user {user_id}, attempting to refresh...")
                 authorized_users.pop(user_id, None)
-                await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
+                
+                # Отправляем сообщение с просьбой войти заново
+                await query.edit_message_text(
+                    "⏰ Ваша сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login\n"
+                    "После входа попробуйте скачать файл ещё раз."
+                )
                 return
             elif response.status_code == 404:
                 logger.error(f"File not found: {recording_id}")
-                await query.answer("❌ Файл не найден.", show_alert=True)
+                await query.edit_message_text("❌ Файл не найден.\nВозможно, он был удалён.")
                 return
             elif response.status_code >= 400:
                 logger.error(f"Download error: {response.status_code} - {response.text}")
-                await query.answer(f"❌ Ошибка скачивания: {response.status_code}", show_alert=True)
+                await query.edit_message_text(f"❌ Ошибка скачивания: {response.status_code}")
                 return
 
             from io import BytesIO
@@ -724,34 +732,36 @@ class TelegramBot:
                 chat_id=query.message.chat_id,
                 document=file_buffer,
                 filename=filename,
-                caption=f"📼 {filename}",
+                caption=f"📼 {filename}\n\nФайл отправлен!",
                 read_timeout=60,
                 write_timeout=60
             )
 
-            await query.answer("✅ Файл отправлен!")
+            await query.edit_message_text("✅ Файл отправлен!\nПроверьте вложения выше.")
             logger.info(f"File sent successfully: {filename}")
 
         except requests.exceptions.Timeout:
             logger.error(f"Download timeout for recording {recording_id}")
-            await query.answer(
+            await query.edit_message_text(
                 "⏱️ Превышено время ожидания.\n"
-                "Файл слишком большой или соединение медленное.",
-                show_alert=True
+                "Файл слишком большой или соединение медленное.\n"
+                "Попробуйте позже."
             )
         except APIError as e:
             logger.error(f"API error during download: {e.error_type} - {e.message}")
             if e.error_type == "session_expired":
                 authorized_users.pop(user_id, None)
-                await query.answer("⏰ Сессия истекла. Войдите снова.", show_alert=True)
+                await query.edit_message_text(
+                    "⏰ Сессия истекла.\n\n"
+                    "Пожалуйста, войдите снова командой /login"
+                )
             else:
-                await query.answer(f"❌ Ошибка: {e.message}", show_alert=True)
+                await query.edit_message_text(f"❌ Ошибка: {e.message}")
         except Exception as e:
             logger.error(f"Download error: {e}", exc_info=True)
-            await query.answer(
+            await query.edit_message_text(
                 "❌ Ошибка при скачивании.\n"
-                "Попробуйте позже или обратитесь к разработчику.",
-                show_alert=True
+                "Попробуйте позже или обратитесь к разработчику."
             )
 
     async def rename_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1119,6 +1129,11 @@ class TelegramBot:
                 await query.edit_message_text(
                     "🔄 Сервис расшифровки временно недоступен.\n"
                     "Попробуйте позже."
+                )
+            elif e.error_type == "server_error":
+                await query.edit_message_text(
+                    "❌ Внутренняя ошибка сервера.\n"
+                    "Попробуйте позже или обратитесь к разработчику."
                 )
             else:
                 await query.edit_message_text(f"❌ Ошибка расшифровки: {e.message}")

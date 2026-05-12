@@ -7,7 +7,9 @@
       "Bash(curl *)",
       "Bash(jq *)",
       "Bash(true)",
-      "Bash(nohup *)"
+      "Bash(nohup *)",
+      "Bash(conda *)",
+      "Bash(uvicorn *)"
     ]
   },
   "$version": 3

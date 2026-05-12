@@ -9,12 +9,12 @@ import org.springframework.web.reactive.function.client.WebClient;
  */
 @Configuration
 public class WebClientConfig {
-    
+
     @Bean
     public WebClient.Builder webClientBuilder() {
         return WebClient.builder();
     }
-    
+
     /**
      * WebClient для сервиса суммаризации.
      */
@@ -25,6 +25,20 @@ public class WebClientConfig {
             .codecs(configurer -> configurer
                 .defaultCodecs()
                 .maxInMemorySize(16 * 1024 * 1024) // 16MB
+            )
+            .build();
+    }
+
+    /**
+     * WebClient для сервиса расшифровки (ASR).
+     */
+    @Bean
+    public WebClient transcriptionWebClient(WebClient.Builder builder, TranscriptionClientProperties properties) {
+        return builder
+            .baseUrl(properties.baseUrl())
+            .codecs(configurer -> configurer
+                .defaultCodecs()
+                .maxInMemorySize(50 * 1024 * 1024) // 50MB для аудиофайлов
             )
             .build();
     }

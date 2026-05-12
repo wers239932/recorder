@@ -63,6 +63,18 @@ summary:
     # Включить автоматическую суммаризацию при загрузке
     auto-summarize: true
 
+# Интеграция с сервисом расшифровки (ASR)
+transcription:
+  client:
+    # URL сервиса расшифровки (faster-whisper)
+    base-url: ${TRANSCRIPTION_SERVICE_URL:http://localhost:8000}
+    # Таймаут запроса (60 секунд для длинных аудио)
+    timeout: 60s
+    # API ключ (если требуется)
+    api-key: ${TRANSCRIPTION_API_KEY:}
+    # Включить автоматическую расшифровку при загрузке
+    auto-transcribe: false
+
 # Логирование
 logging:
   level:

@@ -1,8 +1,8 @@
 package com.example.recorder.client.summary;
 
 import com.example.recorder.config.SummaryClientProperties;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -14,8 +14,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Реализация клиента для сервиса суммаризации через HTTP/REST.
@@ -23,11 +21,15 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SummaryClientImpl implements SummaryClient {
-    
+
     private final WebClient webClient;
     private final SummaryClientProperties properties;
+
+    public SummaryClientImpl(@Qualifier("summaryWebClient") WebClient webClient, SummaryClientProperties properties) {
+        this.webClient = webClient;
+        this.properties = properties;
+    }
     
     @Override
     public Mono<SummaryResult> summarize(String recordingId, String audioFilePath, String language) {
