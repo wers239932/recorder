@@ -4,11 +4,15 @@ import com.example.recorder.auth.DeviceAuthService;
 import com.example.recorder.dto.ApiResponse;
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.RecordingsListResponse;
+import com.example.recorder.dto.SummaryResponse;
 import com.example.recorder.dto.TranscriptionResponse;
 import com.example.recorder.dto.UploadRecordingRequest;
-import com.example.recorder.entity.UserEntity;
+import com.example.recorder.entity.SummaryEntity;
 import com.example.recorder.entity.TranscriptionEntity;
+import com.example.recorder.entity.UserEntity;
+import com.example.recorder.repository.SummaryRepository;
 import com.example.recorder.service.recording.RecordingService;
+import com.example.recorder.service.summary.SummaryService;
 import com.example.recorder.service.transcription.TranscriptionService;
 import com.example.recorder.service.user.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,6 +65,7 @@ public class BotController {
     private final RecordingService recordingService;
     private final TranscriptionService transcriptionService;
     private final DeviceAuthService deviceAuthService;
+    private final SummaryRepository summaryRepository;
     
     /**
      * Регистрация нового пользователя.
@@ -360,18 +365,39 @@ public class BotController {
     public ResponseEntity<ApiResponse<TranscriptionResponse>> getTranscription(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorizationHeader) {
-        
+
         UserEntity user = authenticateUser(authorizationHeader);
-        
+
         // Проверяем, что запись принадлежит пользователю
         if (!recordingService.getRecordingById(id, user.getId()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Запись не найдена");
         }
-        
+
         return transcriptionService.getTranscriptionByRecordingId(id)
                 .map(this::convertToResponse)
                 .map(response -> ResponseEntity.ok(ApiResponse.success(response)))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Расшифровка не найдена"));
+    }
+
+    /**
+     * Получение суммаризации записи.
+     */
+    @GetMapping("/bot/recordings/{id}/summary")
+    public ResponseEntity<ApiResponse<SummaryResponse>> getSummarization(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authorizationHeader) {
+
+        UserEntity user = authenticateUser(authorizationHeader);
+
+        // Проверяем, что запись принадлежит пользователю
+        if (!recordingService.getRecordingById(id, user.getId()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Запись не найдена");
+        }
+
+        return summaryRepository.findByRecordingId(id)
+                .map(SummaryResponse::fromEntity)
+                .map(response -> ResponseEntity.ok(ApiResponse.success(response)))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Суммаризация не найдена"));
     }
     
     // Вспомогательные методы
