@@ -83,28 +83,22 @@ public class SummaryClientImpl implements SummaryClient {
 
     private SummaryResult toSummaryResult(SummaryResponseDto dto, String recordingId) {
         return new SummaryResult(
-            dto.taskId() != null ? dto.taskId() : recordingId,
-            dto.summaryText(),
-            dto.briefSummary(),
-            dto.keywords(),
-            dto.confidenceScore(),
-            dto.detectedLanguage(),
-            dto.status() != null ? dto.status() : SummarizationStatus.COMPLETED,
-            dto.errorMessage()
+            recordingId,
+            dto.summary(),
+            null,  // briefSummary - генерируется локально если нужно
+            null,  // keywords - не возвращается суммаризатором
+            null,  // confidenceScore - не возвращается суммаризатором
+            null,  // detectedLanguage - не возвращается суммаризатором
+            SummarizationStatus.COMPLETED,
+            null
         );
     }
 
     /**
      * DTO ответа от сервиса суммаризации.
+     * Summarizer сервис возвращает: {"summary": "..."}
      */
     record SummaryResponseDto(
-        String taskId,
-        String summaryText,
-        String briefSummary,
-        String[] keywords,
-        Double confidenceScore,
-        String detectedLanguage,
-        SummarizationStatus status,
-        String errorMessage
+        String summary
     ) {}
 }

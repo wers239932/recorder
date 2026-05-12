@@ -128,8 +128,8 @@ public class SummaryServiceImpl implements SummaryService {
                 null,
                 null,
                 errorMsg
-        );
-    }
+            );
+        }
 
         // Сохраняем результат
         summary.setStatus(SummaryEntity.SummaryStatus.COMPLETED);
