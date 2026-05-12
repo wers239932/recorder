@@ -193,32 +193,19 @@ public class RecordingController {
 
             log.info("Recording uploaded (raw): id={}, size={}, deviceLogin={}, userId={}", response.getId(), response.getFileSize(), deviceLogin, userId);
 
-            // Добавляем информацию о суммаризации в ответ
-            String summaryStatus = recordingService.getSummarizationStatus(response.getId());
-            Map<String, String> summarizationInfo = new HashMap<>();
-            summarizationInfo.put("status", summaryStatus);
-            summarizationInfo.put("autoSummarize", "true");
-
-            // Создаём расширенный ответ с информацией о суммаризации
-            RecordingResponse responseWithSummary = RecordingResponse.builder()
-                .id(response.getId())
-                .filename(response.getFilename())
-                .originalFilename(response.getOriginalFilename())
-                .fileSize(response.getFileSize())
-                .contentType(response.getContentType())
-                .deviceInfo(response.getDeviceInfo())
-                .deviceIp(response.getDeviceIp())
-                .status(response.getStatus())
-                .createdAt(response.getCreatedAt())
-                .downloadUrl(response.getDownloadUrl())
-                .build();
+            // Добавляем информацию о транскрипции в ответ
+            String transcriptionStatus = recordingService.getTranscriptionStatus(response.getId());
+            Map<String, String> processingInfo = new HashMap<>();
+            processingInfo.put("transcriptionStatus", transcriptionStatus);
+            processingInfo.put("autoTranscribe", "true");
+            processingInfo.put("autoSummarize", "true");
 
             return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.success(
-                    "Recording uploaded successfully. Summarization started.",
-                    responseWithSummary,
-                    summarizationInfo
+                    "Recording uploaded successfully. Transcription started.",
+                    response,
+                    processingInfo
                 ));
 
         } catch (IllegalArgumentException e) {

@@ -73,7 +73,7 @@ transcription:
     # API ключ (если требуется)
     api-key: ${TRANSCRIPTION_API_KEY:}
     # Включить автоматическую расшифровку при загрузке
-    auto-transcribe: false
+    auto-transcribe: true
 
 # Логирование
 logging:

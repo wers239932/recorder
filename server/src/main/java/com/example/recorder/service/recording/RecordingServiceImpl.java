@@ -1,15 +1,18 @@
 package com.example.recorder.service.recording;
 
 import com.example.recorder.config.SummaryClientProperties;
+import com.example.recorder.config.TranscriptionClientProperties;
 import com.example.recorder.dto.RecordingResponse;
 import com.example.recorder.dto.UploadRecordingRequest;
 import com.example.recorder.entity.RecordingEntity;
 import com.example.recorder.entity.SummaryEntity;
+import com.example.recorder.entity.TranscriptionEntity;
 import com.example.recorder.repository.DeviceRepository;
 import com.example.recorder.repository.RecordingRepository;
 import com.example.recorder.repository.SummaryRepository;
 import com.example.recorder.repository.TranscriptionRepository;
 import com.example.recorder.service.summary.SummaryService;
+import com.example.recorder.service.transcription.TranscriptionService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +48,8 @@ public class RecordingServiceImpl implements RecordingService {
     private final SummaryClientProperties summaryProperties;
     private final DeviceRepository deviceRepository;
     private final TranscriptionRepository transcriptionRepository;
+    private final TranscriptionService transcriptionService;
+    private final TranscriptionClientProperties transcriptionProperties;
 
     @Value("${recorder.storage.path:./recordings}")
     private String storagePath;
@@ -157,9 +162,9 @@ public class RecordingServiceImpl implements RecordingService {
 
         log.info("Recording uploaded successfully: id={}, path={}, userId={}, deviceLogin={}", recording.getId(), filename, userId, deviceLogin);
 
-        // Автоматический запуск суммаризации (если включено в конфигурации)
-        if (Boolean.TRUE.equals(summaryProperties.autoSummarize())) {
-            startSummarizationForEntity(recording, null);
+        // Автоматический запуск транскрипции (если включено в конфигурации)
+        if (Boolean.TRUE.equals(transcriptionProperties.autoTranscribe())) {
+            startTranscriptionForEntity(recording, null);
         }
 
         return RecordingResponse.fromEntity(recording, "");
@@ -331,6 +336,46 @@ public class RecordingServiceImpl implements RecordingService {
         return summaryRepository.findByRecordingId(recordingId)
                 .map(summary -> summary.getStatus().name())
                 .orElse("NOT_STARTED");
+    }
+
+    @Override
+    public String getTranscriptionStatus(String recordingId) {
+        return transcriptionRepository.findByRecordingId(recordingId)
+                .map(transcription -> transcription.getStatus().name())
+                .orElse("NOT_STARTED");
+    }
+
+    /**
+     * Запуск транскрипции для сущности записи.
+     * После завершения транскрипции автоматически запускает суммаризацию (если включено).
+     */
+    @Override
+    @Transactional
+    public void startTranscriptionForEntity(RecordingEntity recording, String language) {
+        log.info("Starting transcription for recording: {}", recording.getId());
+
+        // Проверяем, нет ли уже транскрипции
+        if (transcriptionRepository.existsByRecordingId(recording.getId())) {
+            log.warn("Transcription already exists for recording: {}", recording.getId());
+            return;
+        }
+
+        // Создаём сущность транскрипции
+        TranscriptionEntity transcription = TranscriptionEntity.builder()
+                .recording(recording)
+                .status(TranscriptionEntity.TranscriptionStatus.PENDING)
+                .retryCount(0)
+                .build();
+        transcriptionRepository.save(transcription);
+
+        // Запускаем асинхронную транскрипцию с callback на суммаризацию
+        transcriptionService.startTranscription(recording.getId(), language);
+
+        // Обновляем статус записи
+        recording.setStatus(RecordingEntity.RecordingStatus.TRANSCRIBING);
+        recordingRepository.save(recording);
+
+        log.info("Transcription started for recording: {}", recording.getId());
     }
 
     /**

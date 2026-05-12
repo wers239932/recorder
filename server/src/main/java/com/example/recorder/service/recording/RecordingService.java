@@ -143,6 +143,16 @@ public interface RecordingService {
     void startSummarization(String recordingId, String language, String userId);
 
     /**
+     * Запуск транскрипции для уже загруженной сущности записи.
+     * Оптимизированный метод, избегает повторного запроса в БД.
+     * После завершения транскрипции автоматически запускает суммаризацию (если включено).
+     *
+     * @param recording Сущность записи
+     * @param language Код языка (опционально)
+     */
+    void startTranscriptionForEntity(RecordingEntity recording, String language);
+
+    /**
      * Запуск суммаризации для уже загруженной сущности записи.
      * Оптимизированный метод, избегает повторного запроса в БД.
      *
@@ -158,4 +168,12 @@ public interface RecordingService {
      * @return статус суммаризации
      */
     String getSummarizationStatus(String recordingId);
+
+    /**
+     * Получение статуса транскрипции.
+     *
+     * @param recordingId ID записи
+     * @return статус транскрипции
+     */
+    String getTranscriptionStatus(String recordingId);
 }

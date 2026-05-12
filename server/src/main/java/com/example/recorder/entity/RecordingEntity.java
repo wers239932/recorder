@@ -143,6 +143,21 @@ public class RecordingEntity {
         ANALYZING,
 
         /**
+         * Sent for transcription (speech-to-text).
+         */
+        TRANSCRIBING,
+
+        /**
+         * Transcription completed successfully.
+         */
+        TRANSCRIBED,
+
+        /**
+         * Error during transcription.
+         */
+        TRANSCRIPTION_FAILED,
+
+        /**
          * Sent for summarization.
          */
         SUMMARIZING,

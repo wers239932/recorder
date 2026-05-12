@@ -1,12 +1,14 @@
 package com.example.recorder.service.transcription;
 
 import com.example.recorder.client.transcription.TranscriptionClient;
+import com.example.recorder.config.SummaryClientProperties;
 import com.example.recorder.entity.RecordingEntity;
 import com.example.recorder.entity.TranscriptionEntity;
 import com.example.recorder.entity.TranscriptionEntity.TranscriptionStatus;
 import com.example.recorder.repository.RecordingRepository;
 import com.example.recorder.repository.TranscriptionRepository;
 import com.example.recorder.service.recording.RecordingService;
+import com.example.recorder.service.summary.SummaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -30,6 +32,8 @@ public class TranscriptionServiceImpl implements TranscriptionService {
     private final RecordingRepository recordingRepository;
     private final TranscriptionClient transcriptionClient;
     private final RecordingService recordingService;
+    private final SummaryService summaryService;
+    private final SummaryClientProperties summaryProperties;
 
     @Override
     @Transactional
@@ -87,6 +91,16 @@ public class TranscriptionServiceImpl implements TranscriptionService {
 
         TranscriptionEntity saved = transcriptionRepository.save(transcription);
         log.info("Сохранен результат расшифровки для записи: {}", recordingId);
+
+        // Автоматический запуск суммаризации после успешной транскрипции (если включено)
+        if (Boolean.TRUE.equals(summaryProperties.autoSummarize()) && transcriptionText != null && !transcriptionText.isBlank()) {
+            log.info("Автоматический запуск суммаризации после транскрипции для записи: {}", recordingId);
+            try {
+                summaryService.summarize(recordingId, transcriptionText, detectedLanguage);
+            } catch (Exception e) {
+                log.error("Ошибка при автоматическом запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
+            }
+        }
 
         return saved;
     }
