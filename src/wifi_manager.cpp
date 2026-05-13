@@ -2,14 +2,12 @@
 #include <cstring>
 #include <cstdio>
 
-extern "C" {
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
-#include "esp_wpa2.h"
-}
+#include "esp_eap_client.h"
 
 static const char* TAG = "WiFiManager";
 
@@ -193,11 +191,11 @@ esp_err_t WiFiManager::connect_sta_enterprise(const std::string& ssid, const std
     ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     if (ret != ESP_OK) return ret;
 
-    // Настраиваем параметры WPA2-Enterprise
-    esp_wifi_sta_wpa2_ent_set_identity((uint8_t*)username.c_str(), strlen(username.c_str()));
-    esp_wifi_sta_wpa2_ent_set_username((uint8_t*)username.c_str(), strlen(username.c_str()));
-    esp_wifi_sta_wpa2_ent_set_password((uint8_t*)password.c_str(), strlen(password.c_str()));
-    esp_wifi_sta_wpa2_ent_enable();
+    // Настраиваем параметры WPA2-Enterprise (новый API)
+    esp_eap_client_set_identity((uint8_t*)username.c_str(), strlen(username.c_str()));
+    esp_eap_client_set_username((uint8_t*)username.c_str(), strlen(username.c_str()));
+    esp_eap_client_set_password((uint8_t*)password.c_str(), strlen(password.c_str()));
+    esp_wifi_sta_enterprise_enable();
 
     ret = esp_wifi_start();
     if (ret != ESP_OK) return ret;
