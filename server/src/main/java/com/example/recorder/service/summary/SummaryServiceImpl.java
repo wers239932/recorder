@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -60,19 +61,22 @@ public class SummaryServiceImpl implements SummaryService {
     }
 
     @Override
-    @Transactional
     public void summarize(String recordingId, String transcriptionText, String language) {
-        log.info("Starting sync summarization for recording: {}", recordingId);
+        log.info("Starting summarization for recording: {}", recordingId);
         try {
-            summarizeSync(recordingId, transcriptionText, language);
-            log.info("Sync summarization completed for recording: {}", recordingId);
+            SummarizationResult result = summarizeSync(recordingId, transcriptionText, language);
+            if (result.success()) {
+                log.info("Summarization completed for recording: {}", recordingId);
+            } else {
+                log.error("Summarization failed for recording {}: {}", recordingId, result.errorMessage());
+            }
         } catch (Exception e) {
-            log.error("Sync summarization failed for recording {}: {}", recordingId, e.getMessage(), e);
+            log.error("Summarization error for recording {}: {}", recordingId, e.getMessage(), e);
         }
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SummarizationResult summarizeSync(String recordingId, String transcriptionText, String language) {
         log.info("Starting sync summarization for recording: {}", recordingId);
 

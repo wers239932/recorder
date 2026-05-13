@@ -971,15 +971,20 @@ class TelegramBot:
             user_id = update.effective_user.id
             token = self.get_user_token(user_id)
 
-            # Проверяем существующую суммаризацию
-            recording_result = self.api_request("GET", f"/bot/recordings/{recording_id}", token=token)
-            recording = recording_result["data"]
+            # Проверяем существующую суммаризацию через отдельный endpoint
+            try:
+                summary_result = self.api_request("GET", f"/bot/recordings/{recording_id}/summary", token=token)
+                summary_data = summary_result.get("data", {})
+                status = summary_data.get("status", "PROCESSING")
+                summary_text = summary_data.get("summaryText", "")
+            except APIError as e:
+                if e.error_type == "not_found":
+                    status = "NOT_STARTED"
+                    summary_text = ""
+                else:
+                    raise
 
-            summary_info = recording.get("summary", {})
-            status = summary_info.get("status", "PROCESSING")
-
-            if status == "COMPLETED" and summary_info.get("briefSummary"):
-                summary_text = summary_info.get("briefSummary", "")
+            if status == "COMPLETED" and summary_text:
                 await query.edit_message_text(
                     f"📋 Краткое содержание записи:\n\n"
                     f"📄 {summary_text}\n\n"
@@ -992,7 +997,7 @@ class TelegramBot:
                     "Попробуйте запустить суммаризацию позже."
                 )
                 return
-            elif status == "PROCESSING":
+            elif status in ("PROCESSING", "SUMMARIZING"):
                 await query.edit_message_text(
                     "🔄 Суммаризация уже выполняется...\n\n"
                     "Это может занять несколько минут.\n"
@@ -1005,14 +1010,19 @@ class TelegramBot:
             await asyncio.sleep(2)
 
             # Получаем обновлённый статус
-            recording_result = self.api_request("GET", f"/bot/recordings/{recording_id}", token=token)
-            recording = recording_result["data"]
+            try:
+                summary_result = self.api_request("GET", f"/bot/recordings/{recording_id}/summary", token=token)
+                summary_data = summary_result.get("data", {})
+                status = summary_data.get("status", "PROCESSING")
+                summary_text = summary_data.get("summaryText", "")
+            except APIError as e:
+                if e.error_type == "not_found":
+                    status = "PROCESSING"
+                    summary_text = ""
+                else:
+                    raise
 
-            summary_info = recording.get("summary", {})
-            status = summary_info.get("status", "PROCESSING")
-
-            if status == "COMPLETED" and summary_info.get("briefSummary"):
-                summary_text = summary_info.get("briefSummary", "")
+            if status == "COMPLETED" and summary_text:
                 await query.edit_message_text(
                     f"📋 Краткое содержание записи:\n\n"
                     f"📄 {summary_text}\n\n"

@@ -286,6 +286,17 @@ public class RecordingServiceImpl implements RecordingService {
             return;
         }
 
+        // Проверяем статус транскрипции
+        TranscriptionEntity.TranscriptionStatus transcriptionStatus = transcriptionRepository
+                .findByRecordingId(recordingId)
+                .map(TranscriptionEntity::getStatus)
+                .orElse(TranscriptionEntity.TranscriptionStatus.PENDING);
+
+        if (transcriptionStatus != TranscriptionEntity.TranscriptionStatus.COMPLETED) {
+            throw new IllegalArgumentException(
+                "Суммаризация невозможна: транскрипция не завершена (статус: " + transcriptionStatus + ")");
+        }
+
         SummaryEntity summary = SummaryEntity.builder()
                 .id(UUID.randomUUID().toString())
                 .recording(recording)
@@ -313,6 +324,17 @@ public class RecordingServiceImpl implements RecordingService {
         if (summaryRepository.existsByRecordingId(recordingId)) {
             log.warn("Summarization already exists for recording: {}", recordingId);
             return;
+        }
+
+        // Проверяем статус транскрипции
+        TranscriptionEntity.TranscriptionStatus transcriptionStatus = transcriptionRepository
+                .findByRecordingId(recordingId)
+                .map(TranscriptionEntity::getStatus)
+                .orElse(TranscriptionEntity.TranscriptionStatus.PENDING);
+
+        if (transcriptionStatus != TranscriptionEntity.TranscriptionStatus.COMPLETED) {
+            throw new IllegalArgumentException(
+                "Суммаризация невозможна: транскрипция не завершена (статус: " + transcriptionStatus + ")");
         }
 
         SummaryEntity summary = SummaryEntity.builder()

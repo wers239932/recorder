@@ -21,7 +21,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.vsellm.ru/v1"
-LLM_MODEL = "z-ai/glm-4.6v-flash"
+LLM_MODEL = "qwen/qwen3.5-plus"
 SYSTEM_PROMPT = "Сделай краткую, но информативную выжимку этого текста."
 
 
@@ -42,7 +42,10 @@ def _get_openai_client() -> AsyncOpenAI:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
     base_url = os.getenv("OPENAI_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
-    return AsyncOpenAI(api_key=api_key, base_url=base_url)
+    # Отключаем проверку SSL для корпоративного прокси с самоподписанными сертификатами
+    import httpx
+    client = httpx.AsyncClient(verify=False)
+    return AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=client)
 
 
 @asynccontextmanager

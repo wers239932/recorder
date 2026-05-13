@@ -13,13 +13,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
@@ -36,6 +40,7 @@ public class TranscriptionServiceImpl implements TranscriptionService {
     private final SummaryService summaryService;
     private final SummaryClientProperties summaryProperties;
     private final Executor summaryExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService asyncExecutor = Executors.newCachedThreadPool();
 
     public TranscriptionServiceImpl(
             TranscriptionRepository transcriptionRepository,
@@ -92,7 +97,7 @@ public class TranscriptionServiceImpl implements TranscriptionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public TranscriptionEntity saveTranscriptionResult(String recordingId, String transcriptionText,
                                                       String briefText, String detectedLanguage,
                                                       Double confidenceScore) {
@@ -111,21 +116,29 @@ public class TranscriptionServiceImpl implements TranscriptionService {
 
         // Автоматический запуск суммаризации после успешной транскрипции (если включено)
         if (Boolean.TRUE.equals(summaryProperties.autoSummarize()) && transcriptionText != null && !transcriptionText.isBlank()) {
-            log.info("Автоматический запуск суммаризации после транскрипции для записи: {} (длина текста: {})", 
+            log.info("Автоматический запуск суммаризации после транскрипции для записи: {} (длина текста: {})",
                 recordingId, transcriptionText.length());
-            // Запускаем асинхронно в отдельном потоке после коммита транзакции
-            // Используем @TransactionalEventListener или явное ожидание коммита
-            try {
-                // Вызываем напрямую в том же потоке, но после коммита
-                // Это гарантирует, что транскрипция уже в БД
-                summaryService.summarize(recordingId, transcriptionText, detectedLanguage);
-                log.info("Суммаризация успешно запущена для записи: {}", recordingId);
-            } catch (Exception e) {
-                log.error("Ошибка при автоматическом запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
-            }
+
+            // Суммаризация запускается асинхронно в отдельном потоке и транзакции
+            scheduleSummarization(recordingId, transcriptionText, detectedLanguage);
         }
 
         return saved;
+    }
+
+    /**
+     * Асинхронный запуск суммаризации после коммита.
+     */
+    void scheduleSummarization(String recordingId, String transcriptionText, String detectedLanguage) {
+        asyncExecutor.submit(() -> {
+            try {
+                // Вызываем summarizeSync напрямую с REQUIRES_NEW транзакцией
+                summaryService.summarizeSync(recordingId, transcriptionText, detectedLanguage);
+                log.info("Суммаризация успешно запущена для записи: {}", recordingId);
+            } catch (Exception e) {
+                log.error("Ошибка при запуске суммаризации для записи {}: {}", recordingId, e.getMessage(), e);
+            }
+        });
     }
 
     @Override
@@ -139,6 +152,13 @@ public class TranscriptionServiceImpl implements TranscriptionService {
                     transcription.setRetryCount((transcription.getRetryCount() != null ? transcription.getRetryCount() : 0) + 1);
 
                     transcriptionRepository.save(transcription);
+                    
+                    // Обновляем статус записи
+                    recordingRepository.findById(recordingId).ifPresent(recording -> {
+                        recording.setStatus(RecordingEntity.RecordingStatus.TRANSCRIPTION_FAILED);
+                        recordingRepository.save(recording);
+                    });
+                    
                     log.error("Ошибка расшифровки для записи {}: {}", recordingId, errorMessage);
                 });
     }
