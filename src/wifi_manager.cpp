@@ -8,6 +8,7 @@ extern "C" {
 #include "nvs_flash.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
+#include "esp_wpa2.h"
 }
 
 static const char* TAG = "WiFiManager";
@@ -165,6 +166,66 @@ esp_err_t WiFiManager::connect_sta(const std::string& ssid, const std::string& p
     }
 
     ESP_LOGW(TAG, "Connection timeout after %lu ms", timeout * portTICK_PERIOD_MS);
+    return ESP_ERR_TIMEOUT;
+}
+
+esp_err_t WiFiManager::connect_sta_enterprise(const std::string& ssid, const std::string& username, const std::string& password) {
+    if (!is_initialized_) {
+        ESP_LOGE(TAG, "Not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_LOGI(TAG, "Connecting to Enterprise SSID: %s with username: %s", ssid.c_str(), username.c_str());
+
+    xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+
+    wifi_config_t wifi_config = {};
+    strncpy(reinterpret_cast<char*>(wifi_config.sta.ssid), ssid.c_str(), sizeof(wifi_config.sta.ssid) - 1);
+    
+    // Для WPA2-Enterprise пароль не устанавливается в wifi_config.sta.password
+    // Вместо этого используется esp_wifi_set_config с enterprise настройками
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_ENTERPRISE;
+    wifi_config.sta.listen_interval = 1;
+
+    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (ret != ESP_OK) return ret;
+
+    ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    if (ret != ESP_OK) return ret;
+
+    // Настраиваем параметры WPA2-Enterprise
+    esp_wifi_sta_wpa2_ent_set_identity((uint8_t*)username.c_str(), strlen(username.c_str()));
+    esp_wifi_sta_wpa2_ent_set_username((uint8_t*)username.c_str(), strlen(username.c_str()));
+    esp_wifi_sta_wpa2_ent_set_password((uint8_t*)password.c_str(), strlen(password.c_str()));
+    esp_wifi_sta_wpa2_ent_enable();
+
+    ret = esp_wifi_start();
+    if (ret != ESP_OK) return ret;
+
+    current_status_.mode = Mode::STA;
+    current_status_.is_connected = false;
+    current_status_.ip_address.clear();
+    current_status_.rssi = 0;
+
+    if (status_callback_) {
+        status_callback_(current_status_);
+    }
+
+    constexpr TickType_t timeout = pdMS_TO_TICKS(20000);
+    EventBits_t bits = xEventGroupWaitBits(
+        wifi_event_group,
+        WIFI_CONNECTED_BIT,
+        pdTRUE,
+        pdFALSE,
+        timeout
+    );
+
+    if (bits & WIFI_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "Enterprise connection successful, IP: %s", current_status_.ip_address.c_str());
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG, "Enterprise connection timeout after %lu ms", timeout * portTICK_PERIOD_MS);
     return ESP_ERR_TIMEOUT;
 }
 

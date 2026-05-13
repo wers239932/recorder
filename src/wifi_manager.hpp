@@ -11,6 +11,7 @@ extern "C" {
 class WiFiManager {
 public:
     enum class Mode { OFF, STA, AP };
+    enum class AuthType { WPA2_PSK, WPA2_ENTERPRISE };
 
     struct Status {
         bool is_connected;
@@ -30,6 +31,7 @@ public:
 
     esp_err_t init();
     esp_err_t connect_sta(const std::string& ssid, const std::string& password);
+    esp_err_t connect_sta_enterprise(const std::string& ssid, const std::string& username, const std::string& password);
     esp_err_t start_ap(const std::string& ssid, const std::string& password, uint8_t channel = 1);
     esp_err_t stop();
 

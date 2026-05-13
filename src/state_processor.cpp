@@ -26,7 +26,14 @@ static AuthManager* g_auth_manager = nullptr;
 static ButtonHandler* g_button = nullptr;
 static bool g_creds_file_checked = false;
 static bool g_auth_file_checked = false;
-static std::vector<std::pair<std::string, std::string>> g_wifi_networks;  // SSID, password pairs
+
+struct WifiNetwork {
+    std::string ssid;
+    std::string password;
+    std::string username;  // пустой для WPA2-PSK, заполнен для WPA2-Enterprise
+    bool is_enterprise;
+};
+static std::vector<WifiNetwork> g_wifi_networks;
 static size_t g_current_network_idx = 0;
 
 namespace {
@@ -213,7 +220,9 @@ void StateProcessor::process_waiting_for_creds() {
         if (SDStorage::file_exists(creds_path) != ESP_OK) {
             printf("%s: .creds file not found, creating template\n", TAG);
             std::string template_content =
-                "# WiFi credentials format: SSID:Password\n"
+                "# WiFi credentials format:\n"
+                "# WPA2-PSK: SSID:Password\n"
+                "# WPA2-Enterprise: SSID:Username:Password\n"
                 "# One network per line\n"
                 "TestWiFi:TestPassword\n";
             esp_err_t werr = SDStorage::write_file(creds_path, template_content);
@@ -242,18 +251,54 @@ void StateProcessor::process_waiting_for_creds() {
                     while (!line.empty() && (line.back()=='\r' || line.back()=='\n' || line.back()==' ' || line.back()=='\t')) line.pop_back();
                     size_t start = 0; while (start < line.size() && (line[start]==' ' || line[start]=='\t')) start++;
                     std::string trimmed = line.substr(start);
-                    size_t colon_pos = trimmed.find(':');
-                    if (colon_pos != std::string::npos) {
-                        std::string ssid = trimmed.substr(0, colon_pos);
-                        std::string password = trimmed.substr(colon_pos + 1);
+                    
+                    // Подсчитываем количество двоеточий для определения формата
+                    size_t colon_count = 0;
+                    for (char c : trimmed) {
+                        if (c == ':') colon_count++;
+                    }
+                    
+                    WifiNetwork network;
+                    network.is_enterprise = false;
+                    
+                    if (colon_count == 1) {
+                        // Формат SSID:Password (WPA2-PSK)
+                        size_t colon_pos = trimmed.find(':');
+                        network.ssid = trimmed.substr(0, colon_pos);
+                        network.password = trimmed.substr(colon_pos + 1);
+                        network.username = "";
+                        network.is_enterprise = false;
+                        
                         auto rtrim = [](std::string& s){ while (!s.empty() && (s.back()==' ' || s.back()=='\t')) s.pop_back(); };
                         auto ltrim = [](std::string& s){ size_t i=0; while (i<s.size() && (s[i]==' '||s[i]=='\t')) i++; if (i) s.erase(0,i); };
-                        rtrim(ssid); ltrim(ssid);
-                        rtrim(password); ltrim(password);
-                        if (!ssid.empty()) {
-                            g_wifi_networks.push_back({ssid, password});
-                            printf("%s: parsed network: %s\n", TAG, ssid.c_str());
+                        rtrim(network.ssid); ltrim(network.ssid);
+                        rtrim(network.password); ltrim(network.password);
+                        
+                        if (!network.ssid.empty()) {
+                            g_wifi_networks.push_back(network);
+                            printf("%s: parsed WPA2-PSK network: %s\n", TAG, network.ssid.c_str());
                         }
+                    } else if (colon_count == 2) {
+                        // Формат SSID:Username:Password (WPA2-Enterprise)
+                        size_t first_colon = trimmed.find(':');
+                        size_t second_colon = trimmed.find(':', first_colon + 1);
+                        network.ssid = trimmed.substr(0, first_colon);
+                        network.username = trimmed.substr(first_colon + 1, second_colon - first_colon - 1);
+                        network.password = trimmed.substr(second_colon + 1);
+                        network.is_enterprise = true;
+                        
+                        auto rtrim = [](std::string& s){ while (!s.empty() && (s.back()==' ' || s.back()=='\t')) s.pop_back(); };
+                        auto ltrim = [](std::string& s){ size_t i=0; while (i<s.size() && (s[i]==' '||s[i]=='\t')) i++; if (i) s.erase(0,i); };
+                        rtrim(network.ssid); ltrim(network.ssid);
+                        rtrim(network.username); ltrim(network.username);
+                        rtrim(network.password); ltrim(network.password);
+                        
+                        if (!network.ssid.empty() && !network.username.empty()) {
+                            g_wifi_networks.push_back(network);
+                            printf("%s: parsed WPA2-Enterprise network: %s (user: %s)\n", TAG, network.ssid.c_str(), network.username.c_str());
+                        }
+                    } else {
+                        printf("%s: skipping invalid line (unexpected colon count): %s\n", TAG, trimmed.c_str());
                     }
                 }
                 printf("%s: creds parsed: %zu network(s)\n", TAG, g_wifi_networks.size());
@@ -287,12 +332,20 @@ void StateProcessor::process_waiting_for_creds() {
     // Try to connect to next network in the list (no AP mode)
     if (!g_wifi_networks.empty() && g_current_network_idx < g_wifi_networks.size() && g_wifi_manager) {
         const auto& network = g_wifi_networks[g_current_network_idx];
-        printf("%s: Attempting to connect to: %s\n", TAG, network.first.c_str());
-        esp_err_t err = g_wifi_manager->connect_sta(network.first, network.second);
-        if (err == ESP_OK) {
-            printf("%s: Connection attempt started for %s\n", TAG, network.first.c_str());
+        esp_err_t err;
+        
+        if (network.is_enterprise) {
+            printf("%s: Attempting to connect to Enterprise SSID: %s (user: %s)\n", TAG, network.ssid.c_str(), network.username.c_str());
+            err = g_wifi_manager->connect_sta_enterprise(network.ssid, network.username, network.password);
         } else {
-            printf("%s: Failed to start connection for %s (err=%d)\n", TAG, network.first.c_str(), err);
+            printf("%s: Attempting to connect to SSID: %s\n", TAG, network.ssid.c_str());
+            err = g_wifi_manager->connect_sta(network.ssid, network.password);
+        }
+        
+        if (err == ESP_OK) {
+            printf("%s: Connection attempt started for %s\n", TAG, network.ssid.c_str());
+        } else {
+            printf("%s: Failed to start connection for %s (err=%d)\n", TAG, network.ssid.c_str(), err);
         }
         g_current_network_idx++;
     }
