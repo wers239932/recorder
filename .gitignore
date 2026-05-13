@@ -3,18 +3,16 @@
 *.o
 *.obj
 *.out
+build/
+dist/
 
 # Dependencies
-node_modules/
 venv/
 .venv/
 __pycache__/
-.mypy_cache/
-.pytest_cache/
-dist/
-build/
-target/
-.gradle/
+*.pyc
+*.pyo
+*.pyd
 
 # Logs and temp files
 *.log
@@ -29,10 +27,42 @@ target/
 # Editors
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # System files
 .DS_Store
 Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Package manager caches
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python specific
+.mypy_cache/
+.pytest_cache/
+.tox/
+.coverage
+
+# Java/Maven/Gradle
+target/
+.gradle/
+*.class
+*.jar
+*.war
+
+# C/C++
+*.a
+*.so
+*.dll
+*.dylib
 
 # Compressed files
 *.zip
